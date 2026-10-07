@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Miden XYK — Pool</title>
+  <meta name="description" content="Swap, deposit, and withdraw on a MidenXYK pool." />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="/src/styles/global.css" />
+</head>
+<body>
+  <header class="header">
+    <a class="brand" href="/">
+      <img src="/favicon.svg" alt="" class="brand-logo" width="28" height="28" />
+      <span class="brand-name">MIDEN <span class="accent">XYK</span></span>
+    </a>
+    <nav class="nav">
+      <a href="/">Pools</a>
+      <a href="/create.html">Create</a>
+    </nav>
+    <div class="wallet" id="wallet" aria-live="polite">
+      <button type="button" class="btn btn-primary">Login</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <p><a href="/">← Pools</a></p>
+
+    <section class="panel" id="pool-summary">
+      <h1 id="pool-pair">Pool</h1>
+      <p class="muted mono" id="pool-id">Loading…</p>
+      <dl class="stats" id="pool-stats">
+        <div><dt>Reserve 0</dt><dd id="stat-reserve0">—</dd></div>
+        <div><dt>Reserve 1</dt><dd id="stat-reserve1">—</dd></div>
+        <div><dt>Price</dt><dd id="stat-price">—</dd></div>
+        <div><dt>LP fee</dt><dd id="stat-lp-fee">—</dd></div>
+        <div><dt>Protocol fee</dt><dd id="stat-protocol-fee">—</dd></div>
+        <div><dt>LP supply</dt><dd id="stat-lp-supply">—</dd></div>
+      </dl>
+      <p class="error" id="pool-error" hidden></p>
+    </section>
+
+    <nav class="tabs">
+      <a href="#swap" data-tab="swap">Swap</a>
+      <a href="#add" data-tab="add">Add liquidity</a>
+      <a href="#remove" data-tab="remove">Remove liquidity</a>
+    </nav>
+
+    <section class="panel tab-panel" id="tab-swap" hidden>
+      <h2>Swap</h2>
+      <form id="swap-form" class="form-grid">
+        <label for="swap-side">Pay</label>
+        <select id="swap-side" name="side"></select>
+
+        <label for="swap-amount">Amount</label>
+        <input id="swap-amount" name="amount" type="text" inputmode="decimal" placeholder="0" autocomplete="off" spellcheck="false" required />
+
+        <label for="swap-slippage">Slippage (bps)</label>
+        <input id="swap-slippage" name="slippage" type="number" min="0" max="9999" step="1" value="50" required />
+
+        <div class="quote-box" id="swap-quote">
+          <p class="muted">Enter an amount to see the quote.</p>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="swap-submit" disabled>Connect wallet to swap</button>
+          <span class="muted" id="swap-status"></span>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel tab-panel" id="tab-add" hidden>
+      <h2>Add liquidity</h2>
+      <form id="add-form" class="form-grid">
+        <label for="add-amount0">Token 0 amount</label>
+        <input id="add-amount0" name="amount0" type="text" inputmode="decimal" placeholder="0" autocomplete="off" spellcheck="false" required />
+
+        <label for="add-amount1">Token 1 amount</label>
+        <input id="add-amount1" name="amount1" type="text" inputmode="decimal" placeholder="0" autocomplete="off" spellcheck="false" required />
+
+        <label for="add-slippage">Slippage (bps)</label>
+        <input id="add-slippage" name="slippage" type="number" min="0" max="9999" step="1" value="50" required />
+
+        <div class="quote-box" id="add-quote">
+          <p class="muted">Enter amounts to see the quote.</p>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="add-submit" disabled>Connect wallet to deposit</button>
+          <span class="muted" id="add-status"></span>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel tab-panel" id="tab-remove" hidden>
+      <h2>Remove liquidity</h2>
+      <form id="remove-form" class="form-grid">
+        <label for="remove-lp">LP tokens</label>
+        <input id="remove-lp" name="lp" type="text" inputmode="decimal" placeholder="0" autocomplete="off" spellcheck="false" required />
+
+        <label for="remove-slippage">Slippage (bps)</label>
+        <input id="remove-slippage" name="slippage" type="number" min="0" max="9999" step="1" value="50" required />
+
+        <div class="quote-box" id="remove-quote">
+          <p class="muted">Enter an LP amount to see the quote.</p>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary" id="remove-submit" disabled>Connect wallet to withdraw</button>
+          <span class="muted" id="remove-status"></span>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <footer class="footer">Miden XYK — a constant-product AMM on Miden. Testnet.</footer>
+
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <script type="module" src="/src/pages/pool.ts"></script>
+</body>
+</html>
