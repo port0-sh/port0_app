@@ -21,6 +21,7 @@ import {
 import { clear, el, qs, setText } from '../lib/dom'
 import { formatAmount, formatBps, normalizeHex, parseAmount, shortHex, withHexPrefix } from '../lib/format'
 import { registry, type PoolRecord } from '../lib/registry'
+import { mountSiteChrome } from '../lib/site'
 import { toast } from '../ui/toast'
 import { mountWallet } from '../wallet/ui'
 import {
@@ -41,6 +42,7 @@ import {
 const DEADLINE_MARGIN_SECONDS = 3600n
 
 mountWallet()
+mountSiteChrome()
 
 const poolIdParam = new URLSearchParams(window.location.search).get('id')
 const poolIdHex = poolIdParam ? normalizeHex(poolIdParam) : null
@@ -77,6 +79,7 @@ const removeSlippage = qs<HTMLInputElement>(document, '#remove-slippage')
 const removeQuote = qs<HTMLDivElement>(document, '#remove-quote')
 const removeSubmit = qs<HTMLButtonElement>(document, '#remove-submit')
 const removeStatus = qs<HTMLSpanElement>(document, '#remove-status')
+const poolGate = qs<HTMLParagraphElement>(document, '#pool-gate')
 
 let record: PoolRecord | null = null
 let currentState: PoolState | null = null
@@ -547,16 +550,27 @@ function renderRemoveQuote(): void {
 
 function renderWalletGating(): void {
   const connected = walletStore.get().connected
-  const enabled = connected && record?.feeFaucetId != null
-  console.log('[pool] gating', { connected, feeFaucetId: record?.feeFaucetId ?? null })
+  const hasFees = record?.feeFaucetId != null
+  const enabled = connected && hasFees
 
   for (const button of [swapSubmit, addSubmit, removeSubmit]) {
     button.disabled = !enabled
-    button.textContent = enabled ? 'Submit' : 'Login to act'
+    button.textContent = enabled
+      ? 'Submit'
+      : connected
+        ? 'Trading disabled'
+        : 'Connect wallet to act'
   }
-  if (!connected) {
-    setText(swapStatus, 'Login to act on this pool.')
-  }
+
+  // One gate line above the tabs. Shown only when an action is blocked:
+  // not connected, or the pool has no fee faucet and cannot price notes.
+  const gate = !connected
+    ? 'Login to act on this pool.'
+    : !hasFees
+      ? 'Trading is disabled for this pool: it was imported without its fee faucet id.'
+      : ''
+  poolGate.hidden = gate === ''
+  setText(poolGate, gate)
 }
 
 /** The wallet's account id parsed from its reported address. */

@@ -17,6 +17,7 @@
     <nav class="nav">
       <a href="/">Pools</a>
       <a href="/create.html">Create</a>
+      <a href="/about.html">About</a>
     </nav>
     <div class="wallet" id="wallet" aria-live="polite">
       <button type="button" class="btn btn-primary">Login</button>
@@ -39,6 +40,8 @@
       </dl>
       <p class="error" id="pool-error" hidden></p>
     </section>
+
+    <p class="muted" id="pool-gate" hidden></p>
 
     <nav class="tabs">
       <a href="#swap" data-tab="swap">Swap</a>
@@ -113,7 +116,7 @@
     </section>
   </main>
 
-  <footer class="footer">Miden XYK — a constant-product AMM on Miden. Testnet.</footer>
+  <footer class="footer">Copyright © <span id="footer-year">2026</span> MidenXYK</footer>
 
   <div id="toast-root" class="toast-root" aria-live="polite"></div>
   <script type="module" src="/src/pages/pool.ts"></script>

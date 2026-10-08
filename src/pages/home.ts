@@ -12,9 +12,11 @@ import { formatAmount, formatBps, shortHex } from '../lib/format'
 import { registry, type PoolRecord } from '../lib/registry'
 import { toast } from '../ui/toast'
 import { mountSendPublicNote } from '../features/sendPublicNote'
+import { mountSiteChrome } from '../lib/site'
 import { mountWallet } from '../wallet/ui'
 
 mountWallet()
+mountSiteChrome()
 mountSendPublicNote()
 
 const tableHost = qs<HTMLDivElement>(document, '#pool-table')

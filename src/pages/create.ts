@@ -49,6 +49,7 @@ import {
   validateInitialSupply,
   validateSymbol,
 } from '../lib/token'
+import { mountSiteChrome } from '../lib/site'
 import { toast } from '../ui/toast'
 import { mountWallet } from '../wallet/ui'
 import { mountTokenPicker, type TokenPicker } from '../features/tokenPicker'
@@ -77,6 +78,7 @@ const FAUCET_FUNDING_AMOUNT = Number(TX_FEE_BASE_UNITS * 2n)
 const POOL_FUNDING_AMOUNT = Number(TX_FEE_BASE_UNITS)
 
 mountWallet()
+mountSiteChrome()
 
 /* Launchpad. */
 

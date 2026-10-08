@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Miden XYK — About</title>
+  <meta name="description" content="What MidenXYK is, how its constant-product pools work, and the risks of using it on testnet." />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="stylesheet" href="/src/styles/global.css" />
+</head>
+<body>
+  <header class="header">
+    <a class="brand" href="/">
+      <img src="/favicon.svg" alt="" class="brand-logo" width="28" height="28" />
+      <span class="brand-name">MIDEN <span class="accent">XYK</span></span>
+    </a>
+    <nav class="nav">
+      <a href="/">Pools</a>
+      <a href="/create.html">Create</a>
+      <a href="/about.html" class="active" aria-current="page">About</a>
+    </nav>
+    <div class="wallet" id="wallet" aria-live="polite">
+      <button type="button" class="btn btn-primary">Login</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1>About MidenXYK</h1>
+    <p class="muted">
+      A constant-product automated market maker running on the Miden testnet. Pools,
+      swaps, liquidity, and the token launchpad are all real on-chain accounts and
+      notes; the tokens and the network are not.
+    </p>
+
+    <section class="panel">
+      <h2>What it is</h2>
+      <p>
+        MidenXYK is an XYK (constant-product) AMM. A pool holds two fungible assets and
+        enforces the invariant <span class="mono">x · y = k</span> between their
+        reserves. A swap adds one asset and removes the other at the price the product
+        implies, minus a fee that accrues to liquidity providers and, on a fixed
+        per-tier schedule, to the protocol fee recipient.
+      </p>
+      <p>
+        Each pool is a single public Miden account. Its logic lives in an account
+        component, its state lives in account storage, and every operation arrives as a
+        network note the node consumes on the pool's behalf. There is no off-chain
+        order book and no server that holds your keys.
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>How a pool works</h2>
+      <dl class="stats">
+        <div>
+          <dt>Reserves</dt>
+          <dd>The balances of the two pool assets, held in the pool account vault.</dd>
+        </div>
+        <div>
+          <dt>LP supply</dt>
+          <dd>The pool issues its own LP faucet. LPs hold it in proportion to their share of the reserves.</dd>
+        </div>
+        <div>
+          <dt>LP fee</dt>
+          <dd>Chosen per pool from three tiers: 0.05%, 0.30%, 1.00%. Paid by every swap to LPs.</dd>
+        </div>
+        <div>
+          <dt>Protocol fee</dt>
+          <dd>Fixed by tier (1, 2, or 5 bps) and sent to the platform fee recipient.</dd>
+        </div>
+      </dl>
+      <p class="muted">
+        Add liquidity by depositing both assets; the pool mints LP tokens at the current
+        ratio. Remove liquidity by burning LP tokens for your proportional share,
+        including accrued swap fees.
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>Fees and network costs</h2>
+      <p>
+        Every transaction on Miden pays a network fee in the chain's native fee asset.
+        You must hold it in your wallet before you swap, deposit, withdraw, or create a
+        pool. Network-note operations pay the pool its note-consumption fee through a
+        sponsorship note that the app attaches automatically.
+      </p>
+    </section>
+
+    <section class="panel">
+      <h2>Risk notice</h2>
+      <p class="error">Testnet only. The tokens are not real money and have no value.</p>
+      <ul>
+        <li>The Miden testnet is a work in progress. It can be reset, and balances and pools can disappear.</li>
+        <li>This app is a work in progress. Interfaces, contracts, and fees can change without notice.</li>
+        <li>Never send mainnet assets to any address shown here. There is no mainnet deployment.</li>
+        <li>Nothing here is financial advice. Do not deposit anything you cannot lose.</li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>Links</h2>
+      <ul>
+        <li><a href="https://miden.xyz" rel="noopener noreferrer" target="_blank">Miden</a></li>
+        <li><a href="https://status.testnet.miden.io/" rel="noopener noreferrer" target="_blank">Testnet status</a></li>
+        <li><a href="https://docs.miden.xyz" rel="noopener noreferrer" target="_blank">Miden documentation</a></li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="footer">Copyright © <span id="footer-year">2026</span> MidenXYK</footer>
+
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <script type="module" src="/src/pages/about.ts"></script>
+</body>
+</html>

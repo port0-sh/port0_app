@@ -12,6 +12,7 @@ export function openModal(
   title: string,
   body: Node,
   actions: Node | null = null,
+  onClose?: () => void,
 ): ModalHandle {
   const dialog = el('dialog', { class: 'modal' })
   const closeButton = el(
@@ -30,6 +31,7 @@ export function openModal(
   function close(): void {
     if (dialog.open) dialog.close()
     dialog.remove()
+    onClose?.()
   }
 
   dialog.addEventListener('cancel', (event) => {
