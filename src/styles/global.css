@@ -118,17 +118,71 @@ a:active {
 }
 
 @media (max-width: 700px) {
+  /* Two rows: brand + wallet, then the nav on its own line, so neither the
+     links nor the address chip can push the page wider than the viewport. */
   .header {
-    grid-template-columns: auto 1fr auto;
-    gap: 0.75rem;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "brand wallet"
+      "nav nav";
+    gap: 0.5rem 0.75rem;
+    padding: 0.75rem 1.5ch;
   }
 
-  .nav {
-    justify-self: end;
+  .brand {
+    grid-area: brand;
   }
 
   .wallet {
-    grid-column: 3;
+    grid-area: wallet;
+    justify-self: end;
+  }
+
+  .nav {
+    grid-area: nav;
+    justify-self: start;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+  }
+
+  /* One field per line, each stretched to the full width of the column. */
+  .form-grid {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .form-grid > label {
+    margin-top: 0.35rem;
+  }
+
+  .form-grid > input,
+  .form-grid > select,
+  .form-grid > .token-picker,
+  .form-grid > .fee-tiers,
+  .form-grid > .input-row {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .token-picker {
+    flex-wrap: wrap;
+  }
+
+  .fee-tiers {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .fee-tiers label {
+    width: 100%;
+  }
+
+  .stats {
+    grid-template-columns: 1fr;
+  }
+
+  .tabs {
+    gap: 1rem;
   }
 }
 
@@ -255,6 +309,11 @@ th.mono {
   word-break: break-all;
 }
 
+/* Scroll a wide table inside its panel instead of widening the page. */
+#pool-table {
+  overflow-x: auto;
+}
+
 /* Forms */
 
 input,
@@ -289,6 +348,11 @@ button:disabled {
 
 .form-grid label {
   color: var(--light-grey);
+}
+
+.form-grid .hint {
+  grid-column: 1 / -1;
+  font-size: 0.9em;
 }
 
 .form-actions {

@@ -34,12 +34,8 @@ import {
 } from '../lib/client'
 import { CONFIG } from '../lib/config'
 import { qs, setText } from '../lib/dom'
-import {
-  DEFAULT_LP_FEE_BPS,
-  protocolFeeBps,
-  protocolFeeBpsDisplay,
-} from '../lib/fees'
-import { shortHex, withHexPrefix } from '../lib/format'
+import { DEFAULT_LP_FEE_BPS, protocolFeeBps } from '../lib/fees'
+import { formatBps, shortHex, withHexPrefix } from '../lib/format'
 import { registry, type PoolRecord } from '../lib/registry'
 import {
   DEFAULT_INITIAL_SUPPLY,
@@ -126,8 +122,7 @@ function syncTokenExclusion(): void {
 token0Select.addEventListener('change', syncTokenExclusion)
 token1Select.addEventListener('change', syncTokenExclusion)
 const feeTiers = qs<HTMLDivElement>(document, '#fee-tiers')
-const protocolFeeDisplay = qs<HTMLSpanElement>(document, '#param-protocol-fee-display')
-const feeRecipientDisplay = qs<HTMLSpanElement>(document, '#param-fee-recipient')
+const feeBreakdown = qs<HTMLSpanElement>(document, '#param-fee-breakdown')
 
 const stepAccount = qs<HTMLLIElement>(document, '#step-account')
 const stepDeploy = qs<HTMLLIElement>(document, '#step-deploy')
@@ -387,21 +382,12 @@ function showDeployError(message: string): void {
   setText(deployError, message)
 }
 
-function renderProtocolFee(): void {
+function renderFeeBreakdown(): void {
   const tier = selectedFeeTierBps()
-  setText(protocolFeeDisplay, protocolFeeBpsDisplay(tier))
-}
-
-function renderFeeRecipient(): void {
-  if (CONFIG.protocolFeeRecipient) {
-    setText(feeRecipientDisplay, CONFIG.protocolFeeRecipient)
-  } else {
-    feeRecipientDisplay.classList.add('error')
-    setText(
-      feeRecipientDisplay,
-      'not configured — set VITE_PROTOCOL_FEE_RECIPIENT and rebuild',
-    )
-  }
+  setText(
+    feeBreakdown,
+    `Swap fee: ${formatBps(tier)} to LPs · ${formatBps(protocolFeeBps(tier))} to the protocol.`,
+  )
 }
 
 function renderGating(): void {
@@ -541,9 +527,8 @@ async function run(): Promise<void> {
 
 /* Wire-up. */
 
-feeTiers.addEventListener('change', renderProtocolFee)
-renderProtocolFee()
-renderFeeRecipient()
+feeTiers.addEventListener('change', renderFeeBreakdown)
+renderFeeBreakdown()
 renderGating()
 renderLaunchGating()
 renderLaunchSupplyHint()

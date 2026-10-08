@@ -7,6 +7,7 @@
  */
 
 import { getPublicAccount, sdkModule } from '../lib/client'
+import { formatAmount } from '../lib/format'
 import { requestAssets, walletStore } from '../wallet/wallet'
 
 export interface TokenPicker {
@@ -68,10 +69,16 @@ export function mountTokenPicker(
         try {
           const account = await getPublicAccount(asset.faucetId)
           const meta = BasicFungibleFaucetComponent.fromAccount(account)
-          options.push({
-            id: asset.faucetId,
-            label: meta.symbol().toString(),
-          })
+          const symbol = meta.symbol().toString()
+          // `amount` is base units as a string; fall back to it verbatim if
+          // the wallet ever reports a decimal form instead.
+          let balance = asset.amount
+          try {
+            balance = formatAmount(BigInt(asset.amount), meta.decimals())
+          } catch {
+            // keep the raw string
+          }
+          options.push({ id: asset.faucetId, label: `${symbol} · ${balance}` })
         } catch {
           // Not a fungible faucet (e.g. an LP token); skip it.
         }

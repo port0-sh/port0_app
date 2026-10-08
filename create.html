@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Miden XYK — Create Pool</title>
-  <meta name="description" content="Launch a token and create a MidenXYK constant-product pool on Miden." />
+  <title>Miden XYK — Launch</title>
+  <meta name="description" content="Launch a token and deploy a MidenXYK constant-product pool on Miden." />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/src/styles/global.css" />
@@ -16,7 +16,7 @@
     </a>
     <nav class="nav">
       <a href="/">Pools</a>
-      <a href="/create.html" class="active" aria-current="page">Create</a>
+      <a href="/create.html" class="active" aria-current="page">Launch</a>
       <a href="/about.html">About</a>
     </nav>
     <div class="wallet" id="wallet" aria-live="polite">
@@ -25,31 +25,28 @@
   </header>
 
   <main class="container">
-    <h1>Create pool</h1>
+    <h1>Launch</h1>
     <p class="muted">
-      Launch a token, pair it with another asset, and deploy a pool. Creation deploys the
-      pool account and sends one admin configuration note from your wallet.
+      Launch a token, pair it with another asset, and deploy a pool.
     </p>
 
     <section class="panel">
       <h2>0. Launch a token <span class="muted">(optional)</span></h2>
       <p class="muted">
-        Mints a fixed-supply token straight to your wallet: the faucet is created with
-        maxSupply equal to the initial supply and the whole supply is minted to you. Nobody
-        can mint more. Your wallet first sends 0.000420 USDCX to the new faucet: exactly the
-        two transaction fees (consume + mint, 2 × 210 base units) the faucet will pay.
+        Mints a fixed-supply token straight to your wallet; nobody can mint more. Your
+        wallet pays the network fees in USDCX.
       </p>
       <form id="launch-form" class="form-grid" autocomplete="off">
         <label for="launch-symbol">Symbol</label>
         <input id="launch-symbol" name="symbol" type="text" placeholder="MEME" minlength="3" maxlength="6" spellcheck="false" required />
-        <span class="muted" style="grid-column: 2">3-6 uppercase letters (0.17 protocol: no digits).</span>
+        <span class="muted hint">3-6 uppercase letters (0.17 protocol: no digits).</span>
 
         <label for="launch-decimals">Decimals</label>
         <input id="launch-decimals" name="decimals" type="number" min="0" max="8" step="1" value="4" required />
 
         <label for="launch-supply">Initial supply (tokens)</label>
         <input id="launch-supply" name="supply" type="text" inputmode="decimal" value="1000000" spellcheck="false" required />
-        <span class="muted" id="launch-supply-raw" style="grid-column: 2"></span>
+        <span class="muted hint" id="launch-supply-raw"></span>
 
         <div class="form-actions">
           <button type="submit" class="btn btn-primary" id="launch-button" disabled>Login to launch</button>
@@ -82,20 +79,12 @@
 
         <label>LP fee tier</label>
         <div class="fee-tiers" id="fee-tiers">
-          <label><input type="radio" name="lpFee" value="5" /> 0.05% <span class="muted">· proto 1 bps</span></label>
-          <label><input type="radio" name="lpFee" value="30" checked /> 0.30% <span class="muted">· proto 2 bps</span></label>
-          <label><input type="radio" name="lpFee" value="100" /> 1.00% <span class="muted">· proto 5 bps</span></label>
+          <label><input type="radio" name="lpFee" value="5" /> 0.05%</label>
+          <label><input type="radio" name="lpFee" value="30" checked /> 0.30%</label>
+          <label><input type="radio" name="lpFee" value="100" /> 1.00%</label>
         </div>
 
-        <label>Protocol fee</label>
-        <span id="param-protocol-fee-display" class="mono">2 bps</span>
-        <span class="muted" style="grid-column: 2">Sent to the platform fee recipient.</span>
-
-        <label>Protocol fee recipient</label>
-        <span id="param-fee-recipient" class="mono break-all"></span>
-
-        <label>Deployment fee</label>
-        <span class="muted">Paid from your wallet in USDCX when you send the admin note.</span>
+        <span id="param-fee-breakdown" class="muted hint"></span>
       </form>
     </section>
 
@@ -111,6 +100,7 @@
         <button class="btn btn-primary" id="deploy-button" disabled>Connect wallet to create</button>
         <span class="muted" id="deploy-status"></span>
       </div>
+      <p class="muted" style="margin-top: 0.75rem">Network fees are paid from your wallet in USDCX.</p>
       <p id="deploy-result" hidden>Pool created: <a id="deploy-result-link" href="/pool.html">open pool page →</a></p>
     </section>
   </main>
