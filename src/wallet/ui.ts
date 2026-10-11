@@ -12,6 +12,7 @@ import { WalletReadyState } from '@miden-sdk/miden-wallet-adapter-base'
 import { CONFIG } from '../lib/config'
 import { clear, el } from '../lib/dom'
 import { shortAddress } from '../lib/format'
+import { openSendPublicNote } from '../features/sendPublicNote'
 import { openModal } from '../ui/modal'
 import { toast } from '../ui/toast'
 import {
@@ -27,7 +28,8 @@ export function mountWallet(): void {
   const root = document.getElementById('wallet')
   if (!root) return
 
-  render()
+  let closeOpenMenu: (() => void) | null = null
+
   walletStore.subscribe(render)
 
   // Re-attach a previously saved wallet session; no user interaction
@@ -35,24 +37,13 @@ export function mountWallet(): void {
   void restoreSession().catch(() => {})
 
   function render(): void {
+    closeOpenMenu?.()
+    closeOpenMenu = null
     clear(root as HTMLElement)
     const state = walletStore.get()
 
     if (state.connected && state.address) {
-      root!.append(
-        el('span', { class: 'mono muted', title: state.address }, shortAddress(state.address)),
-        el(
-          'button',
-          {
-            class: 'btn',
-            type: 'button',
-            onclick: () => {
-              void disconnect().catch(() => {})
-            },
-          },
-          'Disconnect',
-        ),
-      )
+      root!.append(accountControl(state.address))
       return
     }
 
@@ -68,6 +59,88 @@ export function mountWallet(): void {
         state.connecting ? 'Connecting…' : 'Login',
       ),
     )
+  }
+
+  /**
+   * The signed-in control: the account id plus a menu holding the utilities and
+   * disconnect. The menu closes on an outside click or Escape.
+   */
+  function accountControl(address: string): HTMLElement {
+    const menu = el(
+      'div',
+      { class: 'menu', role: 'menu', hidden: true },
+      el('p', { class: 'menu-label' }, 'Utils'),
+      el(
+        'button',
+        {
+          class: 'menu-item',
+          type: 'button',
+          role: 'menuitem',
+          onclick: () => {
+            close()
+            openSendPublicNote()
+          },
+        },
+        'Send public note',
+      ),
+      el('hr', { class: 'menu-rule' }),
+      el(
+        'button',
+        {
+          class: 'menu-item',
+          type: 'button',
+          role: 'menuitem',
+          onclick: () => {
+            close()
+            void disconnect().catch(() => {})
+          },
+        },
+        'Disconnect',
+      ),
+    )
+    const trigger = el(
+      'button',
+      {
+        class: 'btn account-btn',
+        type: 'button',
+        'aria-haspopup': 'menu',
+        'aria-expanded': 'false',
+        onclick: () => {
+          if (menu.hidden) open()
+          else close()
+        },
+      },
+      el('span', { class: 'account-glyph', 'aria-hidden': 'true' }, '☻'),
+      el('span', { class: 'mono', title: address }, shortAddress(address)),
+      el('span', { class: 'account-caret', 'aria-hidden': 'true' }, '▾'),
+    )
+    const wrapper = el('div', { class: 'account' }, trigger, menu)
+
+    function onOutside(event: PointerEvent): void {
+      if (!wrapper.contains(event.target as Node)) close()
+    }
+
+    function onKey(event: KeyboardEvent): void {
+      if (event.key === 'Escape') close()
+    }
+
+    function open(): void {
+      menu.hidden = false
+      trigger.setAttribute('aria-expanded', 'true')
+      document.addEventListener('pointerdown', onOutside, true)
+      document.addEventListener('keydown', onKey)
+      closeOpenMenu = close
+    }
+
+    function close(): void {
+      menu.hidden = true
+      trigger.setAttribute('aria-expanded', 'false')
+      document.removeEventListener('pointerdown', onOutside, true)
+      document.removeEventListener('keydown', onKey)
+      closeOpenMenu = null
+    }
+
+    return wrapper
   }
 
   async function openPicker(): Promise<void> {
@@ -117,4 +190,9 @@ export function mountWallet(): void {
       }
     }
   }
+
+  // Bootstrap last. render() reads `closeOpenMenu`, so calling it above the
+  // declaration would throw `Cannot access ... before initialization` and leave
+  // the page shell on screen forever.
+  render()
 }

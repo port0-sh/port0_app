@@ -51,4 +51,24 @@ export const CONFIG = {
    */
   paraApiKey: import.meta.env.VITE_PARA_API_KEY?.trim() ?? '',
   paraEnvironment: import.meta.env.VITE_PARA_ENVIRONMENT?.trim() ?? 'BETA',
+
+  /**
+   * On-chain pool registry account. When set, pool creation emits a register
+   * note after the admin configuration. Empty disables registration.
+   */
+  registryId: import.meta.env.VITE_REGISTRY_ID?.trim() ?? '',
+
+  /**
+   * Register note consumption fee, in the registry's fee asset (the chain fee
+   * asset). Must match the registry's note fee schedule. Decimal string.
+   */
+  registryRegisterFee:
+    import.meta.env.VITE_REGISTRY_REGISTER_FEE?.trim() || '0',
+
+  /**
+   * Indexer base URL. When set, pool state is read from the indexer in one
+   * request instead of one account fetch per pool. Empty keeps the per-pool
+   * chain reads.
+   */
+  indexerUrl: import.meta.env.VITE_INDEXER_URL?.trim() ?? '',
 } as const

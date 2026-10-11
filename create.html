@@ -12,7 +12,7 @@
   <header class="header">
     <a class="brand" href="/">
       <img src="/favicon.svg" alt="" class="brand-logo" width="28" height="28" />
-      <span class="brand-name">MIDEN <span class="accent">XYK</span></span>
+      <span class="brand-name">MIDEN<span class="accent">XYK</span></span>
     </a>
     <nav class="nav">
       <a href="/">Pools</a>
@@ -93,15 +93,37 @@
       <ol class="steps" id="deploy-steps">
         <li id="step-account" data-state="idle">Create pool account <span class="muted">— waiting</span></li>
         <li id="step-deploy" data-state="idle">Deploy pool account <span class="muted">— waiting</span></li>
-        <li id="step-configure" data-state="idle">Send admin configuration note <span class="muted">— waiting</span></li>
+        <li id="step-register" data-state="idle">Register pool <span class="muted">— waiting</span></li>
       </ol>
+      <p class="muted" id="resume-register" hidden>
+        Pool <span class="mono" id="resume-pool-id"></span> is deployed but not registered.
+        <button type="button" class="btn" id="resume-register-button">Finish registration</button>
+      </p>
       <p class="error" id="deploy-error" hidden></p>
       <div class="form-actions">
         <button class="btn btn-primary" id="deploy-button" disabled>Connect wallet to create</button>
+        <button class="btn" id="retry-button" hidden>Retry</button>
+        <button class="btn" id="restart-button" hidden>Restart flow</button>
         <span class="muted" id="deploy-status"></span>
       </div>
       <p class="muted" style="margin-top: 0.75rem">Network fees are paid from your wallet in USDCX.</p>
       <p id="deploy-result" hidden>Pool created: <a id="deploy-result-link" href="/pool.html">open pool page →</a></p>
+    </section>
+
+    <section class="panel">
+      <h2>3. Register an existing pool</h2>
+      <p class="muted">
+        A configured pool that is not yet in the registry. The register note is emitted
+        from the connected wallet and consumed by the registry account.
+      </p>
+      <form id="register-form" class="form-grid" autocomplete="off">
+        <label for="register-pool-id">Pool account id</label>
+        <input id="register-pool-id" type="text" placeholder="0x…" spellcheck="false" required />
+        <div class="form-actions">
+          <button type="submit" class="btn">Register</button>
+          <span class="muted" id="register-status"></span>
+        </div>
+      </form>
     </section>
   </main>
 

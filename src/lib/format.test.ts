@@ -1,12 +1,28 @@
 import { describe, expect, it } from 'vitest'
 import {
+  compactAmount,
   formatAmount,
   formatBps,
+  formatDuration,
+  formatRate,
+  isHexId,
   normalizeHex,
   parseAmount,
   shortAddress,
   shortHex,
 } from './format'
+
+describe('isHexId', () => {
+  it('accepts bare and 0x-prefixed hex regardless of first digit', () => {
+    expect(isHexId('b7a3592bed7cb051151e5b0066a3f5')).toBe(true)
+    expect(isHexId('0xb7a3592bed7cb051151e5b0066a3f5')).toBe(true)
+    expect(isHexId('0abc')).toBe(true)
+  })
+
+  it('rejects bech32 addresses', () => {
+    expect(isHexId('mtst1azxaq6gmsyxjjqfaan8he4r36vkpz4q7')).toBe(false)
+  })
+})
 
 describe('normalizeHex', () => {
   it('strips 0x prefix and lowercases', () => {
@@ -98,5 +114,60 @@ describe('formatBps', () => {
     expect(formatBps(30n)).toBe('0.30%')
     expect(formatBps(100n)).toBe('1.00%')
     expect(formatBps(5000n)).toBe('50.00%')
+  })
+})
+
+describe('formatRate', () => {
+  it('renders a fraction as a percentage', () => {
+    expect(formatRate(0.124)).toBe('12.4%')
+    expect(formatRate(0)).toBe('0.0%')
+    expect(formatRate(0.0005)).toBe('0.1%')
+  })
+
+  it('drops the decimal at and above 100%', () => {
+    expect(formatRate(1.234)).toBe('123%')
+    expect(formatRate(1)).toBe('100%')
+  })
+
+  it('renders a negative or non-finite rate as a dash', () => {
+    expect(formatRate(-0.01)).toBe('—')
+    expect(formatRate(Number.NaN)).toBe('—')
+    expect(formatRate(Number.POSITIVE_INFINITY)).toBe('—')
+  })
+})
+
+describe('formatDuration', () => {
+  it('picks the largest whole unit', () => {
+    expect(formatDuration(86400)).toBe('1d')
+    expect(formatDuration(172800)).toBe('2d')
+    expect(formatDuration(3600)).toBe('1h')
+    expect(formatDuration(5400)).toBe('1h')
+    expect(formatDuration(90)).toBe('1m')
+    expect(formatDuration(59)).toBe('59s')
+    expect(formatDuration(0)).toBe('0s')
+  })
+  it('renders a negative or non-finite duration as a dash', () => {
+    // An indexer from before the field existed sends nothing at all.
+    expect(formatDuration(Number.NaN)).toBe('—')
+    expect(formatDuration(Number.POSITIVE_INFINITY)).toBe('—')
+    expect(formatDuration(-1)).toBe('—')
+  })
+})
+
+describe('compactAmount', () => {
+  it('keeps small amounts exact', () => {
+    expect(compactAmount(1234567n, 4)).toBe('123.4567')
+    expect(compactAmount(0n, 6)).toBe('0')
+  })
+
+  it('shortens thousands, millions, billions, and trillions', () => {
+    expect(compactAmount(1234567890n, 4)).toBe('123.4k')
+    expect(compactAmount(9999999n * 10n ** 4n, 4)).toBe('9.9M')
+    expect(compactAmount(2500000000n * 10n ** 4n, 4)).toBe('2.5B')
+    expect(compactAmount(7n * 10n ** 12n * 10n ** 4n, 4)).toBe('7.0T')
+  })
+
+  it('marks a negative amount', () => {
+    expect(compactAmount(-2500000000n, 0)).toBe('-2.5B')
   })
 })

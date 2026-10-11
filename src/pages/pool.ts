@@ -18,9 +18,12 @@ import {
   xykModule,
   type XykModule,
 } from '../lib/client'
+import { CONFIG } from '../lib/config'
 import { clear, el, qs, setText } from '../lib/dom'
-import { formatAmount, formatBps, normalizeHex, parseAmount, shortHex, withHexPrefix } from '../lib/format'
-import { registry, type PoolRecord } from '../lib/registry'
+import { formatAmount, formatBps, formatDuration, formatRate, isHexId, normalizeHex, parseAmount, shortHex, withHexPrefix } from '../lib/format'
+import { fetchPool, fetchPoolHistory, toPoolView, type HistoryResolution, type IndexerPool, type IndexerSnapshot, type PoolView } from '../lib/indexer'
+import { candles, formatScaled, priceScaled, sampleTime } from '../lib/history'
+import { mountPriceChart, type ChartTheme, type PriceChart } from '../lib/chart'
 import { mountSiteChrome } from '../lib/site'
 import { toast } from '../ui/toast'
 import { mountWallet } from '../wallet/ui'
@@ -52,10 +55,11 @@ const poolIdLine = qs<HTMLElement>(document, '#pool-id')
 const poolError = qs<HTMLParagraphElement>(document, '#pool-error')
 const statReserve0 = qs<HTMLElement>(document, '#stat-reserve0')
 const statReserve1 = qs<HTMLElement>(document, '#stat-reserve1')
-const statPrice = qs<HTMLElement>(document, '#stat-price')
 const statLpFee = qs<HTMLElement>(document, '#stat-lp-fee')
 const statProtocolFee = qs<HTMLElement>(document, '#stat-protocol-fee')
 const statLpSupply = qs<HTMLElement>(document, '#stat-lp-supply')
+const statYield = qs<HTMLElement>(document, '#stat-yield')
+const statFees = qs<HTMLElement>(document, '#stat-fees')
 
 const swapForm = qs<HTMLFormElement>(document, '#swap-form')
 const swapSide = qs<HTMLSelectElement>(document, '#swap-side')
@@ -80,39 +84,140 @@ const removeQuote = qs<HTMLDivElement>(document, '#remove-quote')
 const removeSubmit = qs<HTMLButtonElement>(document, '#remove-submit')
 const removeStatus = qs<HTMLSpanElement>(document, '#remove-status')
 const poolGate = qs<HTMLParagraphElement>(document, '#pool-gate')
+const poolStats = qs<HTMLElement>(document, '#pool-stats')
+const poolBoot = qs<HTMLElement>(document, '#pool-boot')
+const poolBootGlyph = qs<HTMLElement>(document, '#pool-boot-glyph')
+const poolBootTitle = qs<HTMLElement>(document, '#pool-boot-title')
+const poolBootDetail = qs<HTMLElement>(document, '#pool-boot-detail')
+const priceNow = qs<HTMLElement>(document, '#price-now')
+const priceNowValue = qs<HTMLElement>(document, '#price-now-value')
+const priceNowUnit = qs<HTMLElement>(document, '#price-now-unit')
 
-let record: PoolRecord | null = null
+const historyPanel = qs<HTMLElement>(document, '#history-panel')
+const historyChart = qs<HTMLElement>(document, '#history-chart')
+const historyNote = qs<HTMLElement>(document, '#history-note')
+const historyTable = qs<HTMLTableElement>(document, '#history-table')
+const historyRows = qs<HTMLElement>(document, '#history-rows')
+const historyResolutionPicker = qs<HTMLElement>(document, '#history-resolution')
+const historyReserve0Head = qs<HTMLElement>(document, '#history-reserve0-head')
+const historyReserve1Head = qs<HTMLElement>(document, '#history-reserve1-head')
+
+let record: PoolView | null = null
+let indexedPool: IndexerPool | null = null
 let currentState: PoolState | null = null
+
+/** One indexer poll. The indexer samples every 15 s and polls the registry every 60 s. */
+const POOL_POLL_MS = 5000
+/** How long the page follows a confirmed action, and how often it re-reads state. */
+const WATCH_MS = 60000
+const WATCH_STEP_MS = 5000
+/** How often the open page re-reads pool metadata and history. */
+const HISTORY_REFRESH_MS = 60000
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+/**
+ * Braille frames for the wait spinner.
+ *
+ * Eight-dot cells, because the cell a font draws has four rows: a spinner whose
+ * frames only set dots 1 to 6 rotates in the top three rows and leaves the
+ * fourth empty. These frames sweep every dot, so the rotation fills the cell.
+ */
+const BOOT_FRAMES = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷']
+let bootTimer: number | null = null
+
+function startBootLoader(): void {
+  if (bootTimer !== null) return
+  let frame = 0
+  bootTimer = window.setInterval(() => {
+    frame = (frame + 1) % BOOT_FRAMES.length
+    setText(poolBootGlyph, BOOT_FRAMES[frame])
+  }, 90)
+}
+
+function stopBootLoader(): void {
+  if (bootTimer !== null) {
+    window.clearInterval(bootTimer)
+    bootTimer = null
+  }
+}
+
+/**
+ * Resolves when the indexer serves the pool. A pool is absent between its
+ * registration transaction and the indexer's next registry poll, so the page
+ * waits and re-fetches instead of reporting an error. Only an unset pool id or
+ * an unconfigured indexer URL is fatal.
+ */
+async function waitForPool(): Promise<PoolView | null> {
+  poolBoot.hidden = false
+  startBootLoader()
+  let attempt = 0
+  for (;;) {
+    attempt += 1
+    try {
+      const indexed = await fetchPool(CONFIG.indexerUrl, poolIdHex as string)
+      if (indexed) {
+        const view = await toPoolView(indexed)
+        indexedPool = indexed
+        stopBootLoader()
+        poolBoot.hidden = true
+        return view
+      }
+      setText(poolBootTitle, 'Looking for this pool')
+      setText(
+        poolBootDetail,
+        attempt < 12
+          ? 'This pool is not visible yet. New pools appear a few seconds after their ' +
+              'creation transaction confirms.'
+          : 'This pool is still not visible. Check the pool id, or register the pool from ' +
+              'the Launch page.',
+      )
+    } catch {
+      setText(poolBootTitle, 'Pool data is unavailable')
+      setText(poolBootDetail, 'The pool service cannot be reached. Trying again…')
+    }
+    await sleep(POOL_POLL_MS)
+  }
+}
 
 async function boot(): Promise<void> {
   if (!poolIdHex) {
     showPoolError('No pool id in the URL. Use ?id=<pool account id>.')
     return
   }
-  record = registry.get(poolIdHex) ?? null
-  if (!record) {
-    showPoolError('This pool is not in the local registry. Import it from the pools page first.')
+  if (CONFIG.indexerUrl.length === 0) {
+    showPoolError('Set VITE_INDEXER_URL to load pools.')
     return
   }
+  const view = await waitForPool()
+  if (!view) return
+  record = view
   setText(pairTitle, `${record.token0Symbol} / ${record.token1Symbol}`)
   setText(poolIdLine, poolIdHex)
   poolIdLine.setAttribute('title', poolIdHex)
-  if (record.feeFaucetId === null) {
-    toast(
-      'Pool imported without its fee faucet id: trading is disabled. Pools created with this app are fully enabled.',
-      'error',
-      12000,
-    )
+  poolStats.hidden = false
+  renderIndexedPrice()
+  renderPoolStats()
+  if (record.feeFaucetId.length === 0) {
+    toast('Trading is disabled for this pool: it has no fee asset configured.', 'error', 12000)
   }
   setupTabs()
   setupForms()
+  setupHistory()
   renderWalletGating()
   walletStore.subscribe(() => {
     renderWalletGating()
     void refreshBalances()
   })
+  // The chart needs only indexer data, so it draws while the chain read runs.
+  await loadHistory()
   await loadState()
   await refreshBalances()
+  window.setInterval(() => {
+    void refreshRecord().then(() => loadHistory())
+  }, HISTORY_REFRESH_MS)
 }
 
 function showPoolError(message: string): void {
@@ -138,9 +243,9 @@ async function loadState(): Promise<void> {
     await recomputeQuotes()
     renderSummary()
   } catch (error) {
-    showPoolError(
-      `Failed to load pool state: ${error instanceof Error ? error.message : String(error)}`,
-    )
+    // The detail is for the console; the page states the effect, not the cause.
+    console.error('pool state read failed', error)
+    showPoolError('Pool state is unavailable right now. Reload to try again.')
   }
 }
 
@@ -149,10 +254,220 @@ function renderSummary(): void {
   const state = currentState
   setText(statReserve0, formatAmount(state.reserve0, record.token0Decimals))
   setText(statReserve1, formatAmount(state.reserve1, record.token1Decimals))
-  setText(statPrice, priceToken0InToken1(state) ?? '—')
   setText(statLpFee, formatBps(state.fees.lpFeeBps))
-  setText(statProtocolFee, formatBps(state.fees.protocolFeeBps))
+  // The registry's share of the LP fee, not an extra charge: the swapper pays
+  // the LP fee tier either way.
+  setText(statProtocolFee, `${formatBps(state.fees.protocolFeeShareBps)} of the LP fee`)
   setText(statLpSupply, state.lpSupply.toString())
+  renderPriceNow(priceToken0InToken1(state))
+}
+
+/** Renders the headline price. `null` means the pool holds no liquidity. */
+function renderPriceNow(price: string | null): void {
+  if (!record) return
+  priceNowValue.textContent = price ?? '—'
+  priceNowUnit.textContent =
+    price === null
+      ? 'No liquidity yet'
+      : `1 ${record.token0Symbol} = ${price} ${record.token1Symbol}`
+  priceNow.hidden = false
+}
+
+/**
+ * Fills the headline from the indexer before the first chain read lands. The
+ * chain state supersedes it: the indexer samples every 15 s, so its reserves are
+ * the older of the two.
+ */
+function renderIndexedPrice(): void {
+  if (currentState !== null || !record || !indexedPool) return
+  const scaled = priceScaled(
+    { reserve0: indexedPool.reserve0, reserve1: indexedPool.reserve1 },
+    record.token0Decimals,
+    record.token1Decimals,
+  )
+  renderPriceNow(scaled === null ? null : formatScaled(scaled))
+}
+
+/**
+ * Renders the figures the indexer derives from its activity ring: the fee yield
+ * for liquidity providers and the fees they earned. Both cover 24 h, or the
+ * pool's age while it is younger, so the yield carries its basis.
+ */
+function renderPoolStats(): void {
+  const pool = indexedPool
+  const view = record
+  if (!pool || !view) return
+  statYield.textContent =
+    pool.fee_apr_window_secs > 0
+      ? `${formatRate(pool.fee_apr)} ${formatDuration(pool.fee_apr_window_secs)}`
+      : '—'
+  const fees0 = formatAmount(BigInt(pool.lp_fees_24h_0), view.token0Decimals)
+  const fees1 = formatAmount(BigInt(pool.lp_fees_24h_1), view.token1Decimals)
+  statFees.textContent = `${fees0} ${view.token0Symbol} · ${fees1} ${view.token1Symbol}`
+}
+
+/** Re-reads the pool metadata from the indexer; keeps the last view on error. */
+async function refreshRecord(): Promise<void> {
+  if (!poolIdHex) return
+  try {
+    const pool = await fetchPool(CONFIG.indexerUrl, poolIdHex)
+    if (pool) {
+      indexedPool = pool
+      record = await toPoolView(pool)
+      renderIndexedPrice()
+      renderPoolStats()
+    }
+  } catch {
+    // The indexer is the pool source; a failed poll leaves the last view in place.
+  }
+}
+
+/**
+ * Follows a confirmed action until the pool state moves, for up to WATCH_MS.
+ * The wallet confirms at its own block, the pool account changes in the next
+ * block, and the indexer samples within its 15 s poll, so a single read after
+ * the transaction returns stale reserves.
+ */
+function watchUntilChanged(before: PoolState, status: HTMLSpanElement): void {
+  const deadline = Date.now() + WATCH_MS
+  const step = async (): Promise<void> => {
+    await loadState()
+    await refreshBalances()
+    await refreshRecord()
+    await loadHistory()
+    const moved =
+      currentState !== null &&
+      (currentState.reserve0 !== before.reserve0 ||
+        currentState.reserve1 !== before.reserve1 ||
+        currentState.lpSupply !== before.lpSupply)
+    if (moved) {
+      setText(status, '')
+      return
+    }
+    if (Date.now() >= deadline) {
+      setText(status, 'The pool has not changed yet. Reload to check again.')
+      return
+    }
+    setText(status, 'Updating…')
+    await sleep(WATCH_STEP_MS)
+    void step()
+  }
+  void step()
+}
+
+/* Pool history: a lightweight-charts price series plus a sample table. */
+
+/** Table rows, newest first. */
+const HISTORY_ROWS = 24
+
+let historyResolution: HistoryResolution = '1m'
+let chartPromise: Promise<PriceChart> | null = null
+
+/** Reads a stylesheet colour, so the chart matches the palette exactly. */
+function cssColor(name: string, fallback: string): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return value.length > 0 ? value : fallback
+}
+
+function chartTheme(): ChartTheme {
+  return {
+    background: cssColor('--black', '#000000'),
+    text: cssColor('--light-grey', '#a8b6b1'),
+    grid: cssColor('--dark-grey', '#5f574f'),
+    up: cssColor('--green', '#00f239'),
+    down: cssColor('--error', '#f200b9'),
+  }
+}
+
+/** The chart library loads on first use; only this page draws a chart. */
+function ensureChart(): Promise<PriceChart> {
+  chartPromise ??= mountPriceChart(historyChart, chartTheme())
+  return chartPromise
+}
+
+function setupHistory(): void {
+  historyPanel.hidden = false
+  setText(historyReserve0Head, record?.token0Symbol ?? 'Token 0')
+  setText(historyReserve1Head, record?.token1Symbol ?? 'Token 1')
+  historyResolutionPicker.addEventListener('click', (event) => {
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
+      'button[data-resolution]',
+    )
+    const resolution = button?.dataset.resolution as HistoryResolution | undefined
+    if (!button || !resolution || resolution === historyResolution) return
+    historyResolution = resolution
+    for (const chip of historyResolutionPicker.querySelectorAll('button')) {
+      chip.classList.toggle('is-active', chip === button)
+    }
+    void loadHistory()
+  })
+}
+
+async function loadHistory(): Promise<void> {
+  if (!poolIdHex) return
+  try {
+    const samples = await fetchPoolHistory(CONFIG.indexerUrl, poolIdHex, historyResolution)
+    await renderHistory(samples)
+  } catch {
+    historyNote.hidden = false
+    setText(historyNote, 'Price history is unavailable right now.')
+  }
+}
+
+/** Sample time as HH:MM, or MM-DD HH:MM at hourly resolution. */
+function formatSampleTime(timestamp: number): string {
+  const date = new Date(timestamp * 1000)
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  // The long windows span days, so their labels carry the date.
+  if (historyResolution === '1d') {
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${month}-${day}`
+  }
+  if (historyResolution === '1h' || historyResolution === '6h') {
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${month}-${day} ${hours}:${minutes}`
+  }
+  return `${hours}:${minutes}`
+}
+
+async function renderHistory(samples: IndexerSnapshot[]): Promise<void> {
+  renderHistoryTable(samples)
+  const view = record
+  const series =
+    view === null ? [] : candles(samples, view.token0Decimals, view.token1Decimals)
+
+  const chart = await ensureChart()
+  chart.setData(series)
+  const empty = series.length === 0
+  historyChart.hidden = empty
+  historyNote.hidden = !empty
+  if (empty) setText(historyNote, 'No price history yet.')
+}
+
+function renderHistoryTable(samples: IndexerSnapshot[]): void {
+  clear(historyRows)
+  const view = record
+  if (samples.length === 0 || !view) {
+    historyTable.hidden = true
+    return
+  }
+  historyTable.hidden = false
+  for (const sample of samples.slice(-HISTORY_ROWS).reverse()) {
+    const scaled = priceScaled(sample, view.token0Decimals, view.token1Decimals)
+    const row = el('tr')
+    row.append(
+      el('td', { class: 'mono' }, formatSampleTime(sampleTime(sample))),
+      el('td', { class: 'mono' }, String(sample.block)),
+      el('td', { class: 'mono' }, scaled === null ? '—' : formatScaled(scaled)),
+      el('td', { class: 'mono' }, formatAmount(BigInt(sample.reserve0), view.token0Decimals)),
+      el('td', { class: 'mono' }, formatAmount(BigInt(sample.reserve1), view.token1Decimals)),
+      el('td', { class: 'mono' }, formatAmount(BigInt(sample.lp_supply), 0)),
+    )
+    historyRows.append(row)
+  }
 }
 
 /**
@@ -376,7 +691,7 @@ async function refreshBalances(): Promise<void> {
     const assets = await requestAssets()
     const entries = assets.map((asset) => {
       const raw = asset.faucetId.trim()
-      const hex = /^0x?[0-9a-f]+$/i.test(raw)
+      const hex = isHexId(raw)
         ? normalizeHex(raw)
         : normalizeHex(AccountId.fromBech32(raw).toString())
       return [hex, BigInt(asset.amount)] as const
@@ -436,7 +751,7 @@ function renderSwapQuote(): void {
       reserveIn,
       reserveOut,
       state.fees.lpFeeBps,
-      state.fees.protocolFeeBps,
+      state.fees.protocolFeeShareBps,
     )
     const minOut = applySlippage(quote.amountOut, slippageBps)
     const rateRaw = amountOut(10n ** BigInt(decimalsIn), reserveIn, reserveOut, 0n, 0n).amountOut
@@ -550,7 +865,7 @@ function renderRemoveQuote(): void {
 
 function renderWalletGating(): void {
   const connected = walletStore.get().connected
-  const hasFees = record?.feeFaucetId != null
+  const hasFees = (record?.feeFaucetId ?? '').length > 0
   const enabled = connected && hasFees
 
   for (const button of [swapSubmit, addSubmit, removeSubmit]) {
@@ -635,7 +950,7 @@ async function doSwap(): Promise<void> {
   setBusy(swapSubmit, swapStatus, 'Submitting…')
   try {
     await syncWallet()
-    await refreshBeforeAction()
+    const before = await refreshBeforeAction()
     const state = currentState as PoolState
     const { AccountId } = await sdkModule()
     const tokenIn = AccountId.fromHex(withHexPrefix(swapSide.value))
@@ -653,8 +968,7 @@ async function doSwap(): Promise<void> {
     setText(swapStatus, `Submitted ${shortHex(txId)}; confirming…`)
     const { txHash } = await waitForTransaction(txId)
     toast(`Swap confirmed: ${shortHex(txHash)}`)
-    setText(swapStatus, '')
-    await loadState()
+    watchUntilChanged(before, swapStatus)
   } catch (error) {
     toast(error instanceof Error ? error.message : String(error), 'error')
     setText(swapStatus, '')
@@ -668,7 +982,7 @@ async function doAdd(): Promise<void> {
   setBusy(addSubmit, addStatus, 'Submitting…')
   try {
     await syncWallet()
-    await refreshBeforeAction()
+    const before = await refreshBeforeAction()
     const output = await (await poolHandle()).addLiquidity({
       sender,
       recipient: sender,
@@ -681,8 +995,7 @@ async function doAdd(): Promise<void> {
     setText(addStatus, `Submitted ${shortHex(txId)}; confirming…`)
     const { txHash } = await waitForTransaction(txId)
     toast(`Deposit confirmed: ${shortHex(txHash)}`)
-    setText(addStatus, '')
-    await loadState()
+    watchUntilChanged(before, addStatus)
   } catch (error) {
     toast(error instanceof Error ? error.message : String(error), 'error')
     setText(addStatus, '')
@@ -696,7 +1009,7 @@ async function doRemove(): Promise<void> {
   setBusy(removeSubmit, removeStatus, 'Submitting…')
   try {
     await syncWallet()
-    await refreshBeforeAction()
+    const before = await refreshBeforeAction()
     const output = await (await poolHandle()).removeLiquidity({
       sender,
       recipient: sender,
@@ -708,8 +1021,7 @@ async function doRemove(): Promise<void> {
     setText(removeStatus, `Submitted ${shortHex(txId)}; confirming…`)
     const { txHash } = await waitForTransaction(txId)
     toast(`Withdrawal confirmed: ${shortHex(txHash)}`)
-    setText(removeStatus, '')
-    await loadState()
+    watchUntilChanged(before, removeStatus)
   } catch (error) {
     toast(error instanceof Error ? error.message : String(error), 'error')
     setText(removeStatus, '')

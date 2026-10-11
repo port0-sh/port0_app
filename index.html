@@ -12,7 +12,7 @@
   <header class="header">
     <a class="brand" href="/">
       <img src="/favicon.svg" alt="" class="brand-logo" width="28" height="28" />
-      <span class="brand-name">MIDEN <span class="accent">XYK</span></span>
+      <span class="brand-name">MIDEN<span class="accent">XYK</span></span>
     </a>
     <nav class="nav">
       <a href="/" class="active" aria-current="page">Pools</a>
@@ -25,47 +25,35 @@
   </header>
 
   <main class="container">
-    <h1>Pools</h1>
-    <p class="muted">Constant-product AMM pools on Miden. Add a pool by account id, or connect your wallet to trade and provide liquidity.</p>
-
-    <section class="panel">
-      <h2>Browse</h2>
-      <div class="form-actions">
-        <button type="button" class="btn" id="refresh-states">Refresh on-chain state</button>
-        <span class="muted" id="refresh-status"></span>
-      </div>
-      <div id="pool-table">Loading pools…</div>
-    </section>
-
-    <section class="panel">
-      <h2>Import pool</h2>
-      <form id="import-form" class="form-grid">
-        <label for="pool-id">Pool account id</label>
-        <input id="pool-id" name="poolId" type="text" placeholder="0x…" autocomplete="off" spellcheck="false" required />
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Import</button>
-          <span class="muted" id="import-status"></span>
-        </div>
-      </form>
-    </section>
-    <section class="panel">
-      <h2>Send public note</h2>
-      <p class="muted">
-        Send USDCX as a public note. Bread's own UI only sends private notes, which cannot
-        target an account that does not exist on-chain yet.
+    <header class="page-head">
+      <h1>Pools</h1>
+      <p class="lede">
+        Constant-product pools on Miden. Every swap pays a fee to the pool's liquidity
+        providers, and that fee stays in the reserves they own.
       </p>
-      <form id="public-note-form" class="form-grid" autocomplete="off">
-        <label for="public-note-recipient">Recipient address</label>
-        <input id="public-note-recipient" type="text" placeholder="bech32 or 0x…" spellcheck="false" required />
+    </header>
 
-        <label for="public-note-amount">Amount (USDCX)</label>
-        <input id="public-note-amount" type="text" inputmode="decimal" placeholder="0.000420" spellcheck="false" required />
-
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Send</button>
-          <span class="muted" id="public-note-status"></span>
-        </div>
-      </form>
+    <section class="panel">
+      <div class="toolbar">
+        <span class="toolbar-left">
+          <input
+            id="pool-filter"
+            type="search"
+            placeholder="filter by faucet id"
+            spellcheck="false"
+            aria-label="Filter pools by token faucet id"
+          />
+          <span class="muted" id="pool-count">Loading pools…</span>
+        </span>
+        <span class="toolbar-actions">
+          <span class="muted mono" id="refresh-status"></span>
+          <button type="button" class="btn" id="refresh-states">Refresh</button>
+        </span>
+      </div>
+      <div id="pool-table" class="table-wrap">Loading…</div>
+      <div class="form-actions">
+        <button type="button" class="btn" id="load-more" hidden>Load more</button>
+      </div>
     </section>
   </main>
 

@@ -9,7 +9,7 @@
 import type { Account, AccountId, MidenClient } from '@miden-sdk/miden-sdk'
 import type { XykClient } from 'miden-xyk-sdk'
 import { CONFIG } from './config'
-import { withHexPrefix } from './format'
+import { isHexId, withHexPrefix } from './format'
 
 let sdkModulePromise: Promise<typeof import('@miden-sdk/miden-sdk')> | null = null
 let xykModulePromise: Promise<typeof import('miden-xyk-sdk')> | null = null
@@ -64,7 +64,7 @@ export async function getPublicAccount(
 ): Promise<Account> {
   const ref =
     typeof accountId === 'string'
-      ? /^0x?[0-9a-f]+$/i.test(accountId.trim())
+      ? isHexId(accountId)
         ? withHexPrefix(accountId.trim())
         : accountId.trim()
       : accountId.toString()

@@ -19,6 +19,7 @@
     "@miden-sdk/miden-wallet-adapter-base": "^0.17.0",
     "@miden-sdk/miden-wallet-adapter-miden": "^0.17.0",
     "@miden-sdk/para": "^0.17.0",
+    "lightweight-charts": "^5.2.1",
     "miden-xyk-sdk": "file:../miden_xyk_sdk_ts"
   },
   "devDependencies": {

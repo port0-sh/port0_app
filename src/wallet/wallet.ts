@@ -269,11 +269,14 @@ export async function syncWallet(): Promise<void> {
     try {
       await adapter.waitForTransaction(txId)
     } catch {
-      // Unknown or too old: fall through to the store read.
-      await adapter.requestConsumableNotes()
+      // Unknown or too old. The consumable-note read below still syncs.
     }
-    return
   }
+  // Force a wallet sync. The adapter exposes no sync method; reading the
+  // consumable notes makes the wallet sync first, and unlike a
+  // `waitForTransaction` on an already-confirmed transaction it is never a
+  // no-op. The anchor Bread captures is its sync height, so a stale store puts
+  // the anchor on a later block than the request's bound block.
   await adapter.requestConsumableNotes()
 }
 

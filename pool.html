@@ -12,7 +12,7 @@
   <header class="header">
     <a class="brand" href="/">
       <img src="/favicon.svg" alt="" class="brand-logo" width="28" height="28" />
-      <span class="brand-name">MIDEN <span class="accent">XYK</span></span>
+      <span class="brand-name">MIDEN<span class="accent">XYK</span></span>
     </a>
     <nav class="nav">
       <a href="/">Pools</a>
@@ -30,18 +30,65 @@
     <section class="panel" id="pool-summary">
       <h1 id="pool-pair">Pool</h1>
       <p class="muted mono" id="pool-id">Loading…</p>
-      <dl class="stats" id="pool-stats">
+
+      <p class="price-now" id="price-now" hidden>
+        <span class="price-now-value" id="price-now-value">—</span>
+        <span class="price-now-unit" id="price-now-unit"></span>
+      </p>
+
+      <div class="boot" id="pool-boot" hidden>
+        <span class="boot-glyph" id="pool-boot-glyph" aria-hidden="true">⠋</span>
+        <div class="boot-copy">
+          <p class="boot-title" id="pool-boot-title">Looking for this pool</p>
+          <p class="muted boot-detail" id="pool-boot-detail">
+            This pool is not visible yet. New pools appear a few seconds after their
+            creation transaction confirms.
+          </p>
+        </div>
+      </div>
+      <dl class="stats" id="pool-stats" hidden>
         <div><dt>Reserve 0</dt><dd id="stat-reserve0">—</dd></div>
         <div><dt>Reserve 1</dt><dd id="stat-reserve1">—</dd></div>
-        <div><dt>Price</dt><dd id="stat-price">—</dd></div>
         <div><dt>LP fee</dt><dd id="stat-lp-fee">—</dd></div>
-        <div><dt>Protocol fee</dt><dd id="stat-protocol-fee">—</dd></div>
+        <div><dt>Protocol cut</dt><dd id="stat-protocol-fee">—</dd></div>
         <div><dt>LP supply</dt><dd id="stat-lp-supply">—</dd></div>
+        <div><dt>Yield</dt><dd id="stat-yield">—</dd></div>
+        <div><dt>LP fees</dt><dd id="stat-fees">—</dd></div>
       </dl>
       <p class="error" id="pool-error" hidden></p>
     </section>
 
     <p class="muted" id="pool-gate" hidden></p>
+
+    <section class="panel" id="history-panel" hidden>
+      <div class="panel-head">
+        <h2>Price history</h2>
+        <div class="chip-row" id="history-resolution" role="group" aria-label="Time range">
+          <button type="button" class="chip is-active" data-resolution="1m">1m</button>
+          <button type="button" class="chip" data-resolution="5m">5m</button>
+          <button type="button" class="chip" data-resolution="1h">1h</button>
+          <button type="button" class="chip" data-resolution="6h">6h</button>
+          <button type="button" class="chip" data-resolution="1d">1d</button>
+        </div>
+      </div>
+      <div id="history-chart" class="chart"></div>
+      <p class="muted" id="history-note" hidden></p>
+      <div class="table-wrap">
+        <table class="table" id="history-table" hidden>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Block</th>
+              <th>Price</th>
+              <th id="history-reserve0-head">Token 0</th>
+              <th id="history-reserve1-head">Token 1</th>
+              <th>LP</th>
+            </tr>
+          </thead>
+          <tbody id="history-rows"></tbody>
+        </table>
+      </div>
+    </section>
 
     <nav class="tabs">
       <a href="#swap" data-tab="swap">Swap</a>

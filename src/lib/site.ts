@@ -13,9 +13,34 @@ import { openModal } from '../ui/modal'
 
 const DISCLAIMER_KEY = 'miden-xyk-app:testnet-disclaimer:v1'
 
+/** Where the chart library's attribution links to. */
+const TRADINGVIEW_URL = 'https://www.tradingview.com/'
+
 export function mountSiteChrome(): void {
   setFooterYear()
+  setChartAttribution()
   mountDisclaimer()
+}
+
+/**
+ * Adds the chart library's attribution to the footer.
+ *
+ * `lightweight-charts` is Apache-2.0, Copyright 2023 TradingView, Inc. Its
+ * licence requires an attribution notice and a link to tradingview.com; the
+ * in-panel logo is only one way to satisfy that, and a page-wide link is the
+ * other. This link is what allows `attributionLogo: false`.
+ */
+function setChartAttribution(): void {
+  const footer = document.querySelector('.footer')
+  if (!footer || footer.querySelector('.attribution')) return
+  footer.append(
+    el(
+      'span',
+      { class: 'attribution' },
+      ' · Charts by ',
+      el('a', { href: TRADINGVIEW_URL, rel: 'noopener', target: '_blank' }, 'TradingView'),
+    ),
+  )
 }
 
 function setFooterYear(): void {

@@ -9,6 +9,17 @@ export function normalizeHex(value: string): string {
 }
 
 /**
+ * True when the string is a bare or 0x-prefixed hex account-id candidate.
+ *
+ * The prefix group is atomic: `0x?` would mean a literal `0` followed by an
+ * optional `x`, so a bare id starting with any other hex digit (`b7a3…`)
+ * would fail, be treated as bech32, and error on its checksum.
+ */
+export function isHexId(value: string): boolean {
+  return /^(?:0x)?[0-9a-f]+$/i.test(value.trim())
+}
+
+/**
  * Ensures the 0x prefix `AccountId.fromHex` requires: it parses exactly 32
  * hex characters including the prefix, while this app stores bare lowercase
  * hex everywhere else.
@@ -81,4 +92,49 @@ export function formatBps(bps: bigint): string {
   const whole = bps / 100n
   const frac = (bps % 100n).toString().padStart(2, '0')
   return `${whole}.${frac}%`
+}
+
+/**
+ * A rate as a percentage: 0.124 becomes "12.4%". Rates at or above 100% lose the
+ * decimal, where it carries no information. A negative or non-finite rate has no
+ * meaning here and renders as a dash.
+ */
+export function formatRate(rate: number): string {
+  if (!Number.isFinite(rate) || rate < 0) return '—'
+  const percent = rate * 100
+  return `${percent >= 100 ? percent.toFixed(0) : percent.toFixed(1)}%`
+}
+
+/** A duration in seconds as its largest whole unit: 86400 -> "1d", 90 -> "1m". */
+export function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '—'
+  if (seconds >= 86400) return `${Math.floor(seconds / 86400)}d`
+  if (seconds >= 3600) return `${Math.floor(seconds / 3600)}h`
+  if (seconds >= 60) return `${Math.floor(seconds / 60)}m`
+  return `${Math.floor(seconds)}s`
+}
+
+/**
+ * An amount shortened to three significant digits with a unit suffix, for table
+ * columns: 1234567 units at 4 decimals becomes "123M". Values below a thousand
+ * are rendered exactly, so small pools are not rounded to nothing.
+ */
+export function compactAmount(amount: bigint, decimals: number): string {
+  const negative = amount < 0n
+  const absolute = negative ? -amount : amount
+  const whole = absolute / 10n ** BigInt(decimals)
+  const sign = negative ? '-' : ''
+  const units: [bigint, string][] = [
+    [10n ** 12n, 'T'],
+    [10n ** 9n, 'B'],
+    [10n ** 6n, 'M'],
+    [10n ** 3n, 'k'],
+  ]
+  for (const [scale, suffix] of units) {
+    if (whole >= scale) {
+      const scaled = (absolute * 10n) / (scale * 10n ** BigInt(decimals))
+      return `${sign}${scaled / 10n}.${scaled % 10n}${suffix}`
+    }
+  }
+  return formatAmount(amount, decimals)
 }

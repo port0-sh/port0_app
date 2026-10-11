@@ -215,6 +215,13 @@ a:active {
   letter-spacing: 0.1em;
 }
 
+/* XYK as a superscript in the wordmark. */
+.brand-name .accent {
+  vertical-align: super;
+  font-size: 0.7em;
+  letter-spacing: normal;
+}
+
 .nav {
   display: flex;
   gap: 1.5rem;
@@ -595,4 +602,316 @@ dialog.modal::backdrop {
   100% {
     content: "...";
   }
+}
+
+/* Pool boot loader: shown while the indexer has not served the pool yet. */
+
+.boot {
+  display: flex;
+  gap: 1.5ch;
+  align-items: flex-start;
+  border: 1px solid var(--dark-green);
+  padding: 1rem 1.5ch;
+  background-color: var(--darkest-green);
+}
+
+.boot-glyph {
+  color: var(--green);
+  font-size: 1.4em;
+  line-height: 1.2;
+  min-width: 1.6ch;
+  text-align: center;
+}
+
+.boot-copy {
+  min-width: 0;
+}
+
+.boot-title {
+  margin: 0 0 0.35rem;
+  color: var(--green);
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.boot-detail {
+  margin: 0;
+  max-width: 68ch;
+}
+
+/* History: SVG price line plus a samples table. */
+
+.panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.panel-head h2 {
+  margin: 0 0 0.75rem;
+}
+
+.chip-row {
+  display: flex;
+  gap: 0.75ch;
+}
+
+.chip {
+  background: transparent;
+  border: 1px solid var(--dark-grey);
+  color: var(--light-grey);
+  padding: 0.15rem 1ch;
+  cursor: pointer;
+}
+
+.chip.is-active {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+/* The chart library sizes its canvas to the container box. */
+.chart {
+  width: 100%;
+  height: 280px;
+}
+
+/* Current price, the first thing the eye lands on. */
+.price-now {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5ch;
+  flex-wrap: wrap;
+  margin: 0.5rem 0 1rem;
+}
+
+.price-now-value {
+  color: var(--green);
+  font-size: clamp(2rem, 6vw, 3.25rem);
+  font-weight: bold;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.price-now-unit {
+  color: var(--light-grey);
+  font-size: 0.95em;
+}
+
+.table-wrap {
+  max-height: 24rem;
+  overflow: auto;
+  margin-top: 1rem;
+}
+
+#history-note {
+  margin: 0.75rem 0 0;
+}
+
+/* Page header: title and one-line lede. */
+
+.page-head {
+  margin: 0.5rem 0 1.5rem;
+}
+
+.page-head h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.6em;
+  letter-spacing: 0.02em;
+}
+
+.lede {
+  margin: 0;
+  max-width: 74ch;
+  color: var(--light-grey);
+}
+
+/* Toolbar above a list: a count on the left, actions on the right. */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5ch;
+}
+
+/* Pool list. Numeric columns are right-aligned and tabular. */
+
+#pool-table {
+  max-height: none;
+}
+
+.pool-table th.num,
+.pool-table td.num {
+  text-align: right;
+}
+
+.pool-table td {
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.pool-table tbody tr:hover {
+  background-color: var(--darkest-green);
+}
+
+.pool-table .pair {
+  display: block;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.pool-table .figure {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  font-weight: bold;
+}
+
+.pool-table .line {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sub {
+  display: block;
+  color: var(--dark-grey);
+  font-size: 0.85em;
+  font-weight: normal;
+  white-space: nowrap;
+}
+
+.tag {
+  display: inline-block;
+  margin-top: 0.25rem;
+  border: 1px solid var(--dark-grey);
+  color: var(--light-grey);
+  padding: 0 0.5ch;
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.accent {
+  color: var(--green);
+}
+
+.open-col {
+  width: 2ch;
+}
+
+.open {
+  color: var(--dark-grey);
+  font-size: 1.2em;
+}
+
+.pool-table tbody tr:hover .open,
+.pool-table tbody tr:hover .pair {
+  color: var(--green);
+}
+
+@media (max-width: 700px) {
+  .hide-sm {
+    display: none;
+  }
+}
+
+/* Account control and its menu. */
+
+.account {
+  position: relative;
+}
+
+.account-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 1ch;
+}
+
+.account-glyph {
+  color: var(--green);
+}
+
+.account-caret {
+  color: var(--dark-grey);
+  font-size: 0.8em;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 10;
+  min-width: 24ch;
+  border: 1px solid var(--dark-grey);
+  background-color: var(--black);
+  padding: 0.5rem 0;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 60%);
+}
+
+.menu-label {
+  margin: 0;
+  padding: 0 1.5ch 0.5rem;
+  color: var(--dark-grey);
+  font-size: 0.75em;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.menu-item {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--white);
+  cursor: pointer;
+  padding: 0.4rem 1.5ch;
+  text-align: left;
+}
+
+.menu-item:hover {
+  background-color: var(--darkest-green);
+  color: var(--green);
+}
+
+.menu-rule {
+  border: 0;
+  border-top: 1px solid var(--dark-grey);
+  margin: 0.5rem 0;
+}
+
+.attribution {
+  color: var(--dark-grey);
+}
+
+.attribution a {
+  color: var(--light-grey);
+  font-weight: normal;
+  text-decoration: none;
+}
+
+.attribution a:hover {
+  color: var(--green);
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 1.5ch;
+  flex-wrap: wrap;
+}
+
+#pool-filter {
+  width: 22ch;
+  padding: 0.2rem 0.5ch;
 }
