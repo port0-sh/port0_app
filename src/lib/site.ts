@@ -8,6 +8,8 @@
  * real-money notice is shown before the user can reach any action.
  */
 
+import { mountBrand } from './brand'
+import { CONFIG } from './config'
 import { el } from './dom'
 import { openModal } from '../ui/modal'
 
@@ -17,6 +19,7 @@ const DISCLAIMER_KEY = 'miden-xyk-app:testnet-disclaimer:v1'
 const TRADINGVIEW_URL = 'https://www.tradingview.com/'
 
 export function mountSiteChrome(): void {
+  mountBrand()
   setFooterYear()
   setChartAttribution()
   mountDisclaimer()
@@ -46,6 +49,8 @@ function setChartAttribution(): void {
 function setFooterYear(): void {
   const year = document.getElementById('footer-year')
   if (year) year.textContent = String(new Date().getFullYear())
+  const brand = document.getElementById('footer-brand')
+  if (brand) brand.textContent = CONFIG.brand.name
 }
 
 function mountDisclaimer(): void {

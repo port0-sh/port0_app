@@ -8,11 +8,11 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/src/styles/global.css" />
 </head>
-<body>
+<body data-page="Launch">
   <header class="header">
     <a class="brand" href="/">
-      <img src="/favicon.svg" alt="" class="brand-logo" width="28" height="28" />
-      <span class="brand-name">MIDEN<span class="accent">XYK</span></span>
+      <img src="/favicon.svg" alt="" class="brand-mark" width="28" height="28" />
+      <span class="brand-name">port0.sh</span>
     </a>
     <nav class="nav">
       <a href="/">Pools</a>
@@ -27,69 +27,12 @@
   <main class="container">
     <h1>Launch</h1>
     <p class="muted">
-      Launch a token, pair it with another asset, and deploy a pool.
+      Deploy a constant-product pool for two faucets, then list it in the registry.
     </p>
 
-    <section class="panel">
-      <h2>0. Launch a token <span class="muted">(optional)</span></h2>
-      <p class="muted">
-        Mints a fixed-supply token straight to your wallet; nobody can mint more. Your
-        wallet pays the network fees in USDCX.
-      </p>
-      <form id="launch-form" class="form-grid" autocomplete="off">
-        <label for="launch-symbol">Symbol</label>
-        <input id="launch-symbol" name="symbol" type="text" placeholder="MEME" minlength="3" maxlength="6" spellcheck="false" required />
-        <span class="muted hint">3-6 uppercase letters (0.17 protocol: no digits).</span>
-
-        <label for="launch-decimals">Decimals</label>
-        <input id="launch-decimals" name="decimals" type="number" min="0" max="8" step="1" value="4" required />
-
-        <label for="launch-supply">Initial supply (tokens)</label>
-        <input id="launch-supply" name="supply" type="text" inputmode="decimal" value="1000000" spellcheck="false" required />
-        <span class="muted hint" id="launch-supply-raw"></span>
-
-        <div class="form-actions">
-          <button type="submit" class="btn btn-primary" id="launch-button" disabled>Login to launch</button>
-          <span class="muted" id="launch-status"></span>
-        </div>
-        <div class="form-actions" id="launch-result" hidden>
-          <span class="mono" id="launch-faucet-id"></span>
-          <button type="button" class="btn" id="launch-use-token0">Use as Token 0</button>
-          <button type="button" class="btn" id="launch-use-token1">Use as Token 1</button>
-        </div>
-      </form>
-    </section>
 
     <section class="panel">
-      <h2>1. Pool parameters</h2>
-      <form id="params-form" class="form-grid" autocomplete="off">
-        <label for="param-token0-select">Token 0</label>
-        <div class="token-picker">
-          <select id="param-token0-select" class="token-select"></select>
-          <input id="param-token0" name="token0" type="text" placeholder="0x… or bech32" spellcheck="false" hidden required />
-          <button type="button" class="btn btn-link token-toggle" id="token0-toggle">manual</button>
-        </div>
-
-        <label for="param-token1-select">Token 1</label>
-        <div class="token-picker">
-          <select id="param-token1-select" class="token-select"></select>
-          <input id="param-token1" name="token1" type="text" placeholder="0x… or bech32" spellcheck="false" hidden required />
-          <button type="button" class="btn btn-link token-toggle" id="token1-toggle">manual</button>
-        </div>
-
-        <label>LP fee tier</label>
-        <div class="fee-tiers" id="fee-tiers">
-          <label><input type="radio" name="lpFee" value="5" /> 0.05%</label>
-          <label><input type="radio" name="lpFee" value="30" checked /> 0.30%</label>
-          <label><input type="radio" name="lpFee" value="100" /> 1.00%</label>
-        </div>
-
-        <span id="param-fee-breakdown" class="muted hint"></span>
-      </form>
-    </section>
-
-    <section class="panel">
-      <h2>2. Deploy</h2>
+      <h2>1. Deploy</h2>
       <ol class="steps" id="deploy-steps">
         <li id="step-account" data-state="idle">Create pool account <span class="muted">— waiting</span></li>
         <li id="step-deploy" data-state="idle">Deploy pool account <span class="muted">— waiting</span></li>
@@ -111,7 +54,7 @@
     </section>
 
     <section class="panel">
-      <h2>3. Register an existing pool</h2>
+      <h2>2. Register an existing pool</h2>
       <p class="muted">
         A configured pool that is not yet in the registry. The register note is emitted
         from the connected wallet and consumed by the registry account.
@@ -127,7 +70,7 @@
     </section>
   </main>
 
-  <footer class="footer">Copyright © <span id="footer-year">2026</span> MidenXYK</footer>
+  <footer class="footer">Copyright © <span id="footer-year">2026</span> <span id="footer-brand">port0.sh</span></footer>
 
   <div id="toast-root" class="toast-root" aria-live="polite"></div>
   <script type="module" src="/src/pages/create.ts"></script>

@@ -12,7 +12,7 @@ TypeScript.
 | ------------------------ | -------------- | ------------------------------------------------------------- |
 | `/`                      | `index.html`   | Browse every registered pool from the indexer                 |
 | `/pool.html?id=<poolid>` | `pool.html`    | Pool state, swap, add liquidity, remove liquidity             |
-| `/create.html`           | `create.html`  | Launch a token, create and deploy a pool, send the admin configuration note |
+| `/create.html`           | `create.html`  | Deploy a pool and register it |
 
 Pool ids are canonical account-id hex strings (`AccountId.toString()`), with
 or without a `0x` prefix.
@@ -106,7 +106,7 @@ src/wallet/
 src/pages/
   home.ts       pool table from the indexer, 15 s refresh while visible
   pool.ts       state summary, quotes, swap/add/remove, history chart
-  create.ts     create pool wizard (three steps)
+  create.ts     pool deployment and registration
 ```
 
 The home page loads the SDK only to map the fee schedule roots to note kinds;
@@ -193,11 +193,37 @@ is younger, and that window is shown next to the rate.
 ## Wallet menu
 
 The header shows a Login button until a wallet connects. Afterwards it shows the
-account id; pressing it opens a menu holding **Send public note** under a Utils
-heading and **Disconnect**. The public-note form sends the chain fee asset
-through the wallet's own `requestSend` with a public note type, which is the
-only path that can target an account that does not exist on-chain yet. Moving it
-into the menu keeps it off the pages that do not need it.
+account id; pressing it opens a menu whose Utils group holds two utilities and
+whose last item disconnects.
+
+| Utility | What it does |
+| --- | --- |
+| One-time mint | Creates a public faucet whose whole supply is minted to the wallet in one transaction, with `maxSupply` equal to that supply. Nothing can be minted afterwards and no auth component is installed |
+| Send public note | Sends the chain fee asset through the wallet's own `requestSend` with a public note type, the only path that can target an account that does not exist on-chain yet |
+
+Both build their form in a modal, so no page carries a utility it does not need.
+
+## Branding
+
+MidenXYK is the library; a deployment is a platform with its own name, mark, and
+artwork. All of it comes from `.env`:
+
+| Variable | Effect |
+| --- | --- |
+| `VITE_BRAND_NAME` | Wordmark and the name in every page title |
+| `VITE_BRAND_LOGO_TEXT` | Single-line text mark, used when no image is given |
+| `VITE_BRAND_LOGO_IMAGE` | Logo image path or URL, takes precedence over the text |
+
+The banner is `src/assets/banners/finished.html`, injected as it stands. It is
+authored markup rather than generated: it holds the `<pre class="banner-source">`
+with the artwork and any `<span class="banner-swell">` runs that move, and
+`src/styles/global.css` holds the motion. Edit both files by hand; nothing in the
+application parses or reassembles the drawing.
+
+Artwork is rendered in the bundled `aahub_light` font, which is what gives
+Japanese ASCII art the character widths its authors assumed; its licences
+(monapo, SIL OFL 1.1; IPA Gothic, IPA Font License 1.0) travel with it in
+`public/fonts/`.
 
 ## Pool operations
 

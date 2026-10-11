@@ -22,6 +22,22 @@ export const CONFIG = {
   appName: 'Miden XYK',
 
   /**
+   * Branding. MidenXYK is the library; a deployment is a platform with its own
+   * name, mark, and artwork, so all of it comes from env vars rather than being
+   * written into the pages.
+   */
+  brand: {
+    /** Wordmark and page-title name. */
+    name: import.meta.env.VITE_BRAND_NAME?.trim() || 'Miden XYK',
+    /** Single-line text mark, used when no logo image is given. */
+    logoText: import.meta.env.VITE_BRAND_LOGO_TEXT?.trim() ?? '',
+    /** Logo image path or URL. Takes precedence over `logoText`. */
+    logoImage: import.meta.env.VITE_BRAND_LOGO_IMAGE?.trim() ?? '',
+    /** One line under the name on the home page; hidden when empty. */
+    slogan: import.meta.env.VITE_BRAND_SLOGAN?.trim() ?? '',
+  },
+
+  /**
    * RPC endpoint for on-chain reads. In development this is the same-origin
    * proxy path; in production it is VITE_MIDEN_RPC_URL or the public testnet
    * RPC endpoint.

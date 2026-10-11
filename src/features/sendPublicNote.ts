@@ -2,8 +2,8 @@
  * Utility: send a public note.
  *
  * Opens a modal with a recipient and an amount, and sends through the wallet's
- * own `requestSend` endpoint with noteType "public", the same path the launchpad
- * funding uses. The wallet builds and signs the transaction itself, so there is
+ * own `requestSend` endpoint with noteType "public", the same path the one-time mint
+ * uses to fund a faucet. The wallet builds and signs the transaction itself, so there is
  * no multisig fee-salt handling here. A public note is published on-chain and
  * discoverable by its target on the next sync, unlike Bread's own sends, which
  * are private and cannot reach an account that does not exist on-chain yet.

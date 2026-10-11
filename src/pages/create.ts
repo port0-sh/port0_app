@@ -1,5 +1,5 @@
 /**
- * Create pool page: launchpad + three-step pool deployment.
+ * Create pool page: three-step pool deployment.
  *
  * Launchpad: mints a fixed-supply token to the creator's wallet (faucet with
  * maxSupply = initial supply, whole supply minted in one transaction). The
@@ -19,7 +19,7 @@
  * recipient from VITE_PROTOCOL_FEE_RECIPIENT; users never set it. Network
  * note fees are denominated in the configured USDC faucet asset.
  *
- * The SDK loads on first use; the page shell and the launchpad form render
+ * The SDK loads on first use; the page shell and the forms render
  * without it.
  */
 
@@ -38,18 +38,10 @@ import { DEFAULT_LP_FEE_BPS } from '../lib/fees'
 import type { RegistryFeePolicy } from 'miden-xyk-sdk'
 import { formatBps, isHexId, shortHex, withHexPrefix } from '../lib/format'
 
-import {
-  DEFAULT_INITIAL_SUPPLY,
-  normalizeSymbol,
-  parseInitialSupply,
-  validateDecimals,
-  validateInitialSupply,
-  validateSymbol,
-} from '../lib/token'
 import { mountSiteChrome } from '../lib/site'
 import { toast } from '../ui/toast'
 import { mountWallet } from '../wallet/ui'
-import { mountTokenPicker, type TokenPicker } from '../features/tokenPicker'
+import { mountTokenPicker } from '../features/tokenPicker'
 import {
   sendViaWallet,
   submitViaWallet,
@@ -69,7 +61,6 @@ const NOTE_KINDS: readonly PoolNoteKind[] = ['mint', 'burn', 'swap', 'collect']
 const TX_FEE_BASE_UNITS = 133n
 
 /** Funding the faucet covers two transactions: 2 × 133 = 266. */
-const FAUCET_FUNDING_AMOUNT = Number(TX_FEE_BASE_UNITS * 2n)
 
 /** Funding the pool covers one transaction (the deploy consume): 133. */
 const POOL_FUNDING_AMOUNT = Number(TX_FEE_BASE_UNITS)
@@ -79,34 +70,16 @@ mountSiteChrome()
 
 /* Launchpad. */
 
-const launchForm = qs<HTMLFormElement>(document, '#launch-form')
-const launchSymbol = qs<HTMLInputElement>(document, '#launch-symbol')
-const launchDecimals = qs<HTMLInputElement>(document, '#launch-decimals')
-const launchSupply = qs<HTMLInputElement>(document, '#launch-supply')
-const launchSupplyRaw = qs<HTMLSpanElement>(document, '#launch-supply-raw')
-const launchButton = qs<HTMLButtonElement>(document, '#launch-button')
-const launchStatus = qs<HTMLSpanElement>(document, '#launch-status')
-const launchResult = qs<HTMLDivElement>(document, '#launch-result')
-const launchFaucetId = qs<HTMLSpanElement>(document, '#launch-faucet-id')
-const launchUseToken0 = qs<HTMLButtonElement>(document, '#launch-use-token0')
-const launchUseToken1 = qs<HTMLButtonElement>(document, '#launch-use-token1')
 
 /* Pool parameters. */
 
 const token0Input = qs<HTMLInputElement>(document, '#param-token0')
 const token1Input = qs<HTMLInputElement>(document, '#param-token1')
 
-// Wallet-token pickers; the text inputs stay the source of truth.
-const token0Picker: TokenPicker = mountTokenPicker(
-  'param-token0-select',
-  'param-token0',
-  'token0-toggle',
-)
-const token1Picker: TokenPicker = mountTokenPicker(
-  'param-token1-select',
-  'param-token1',
-  'token1-toggle',
-)
+// Wallet-token pickers; the text inputs stay the source of truth. Mounted for
+// their controls: the selection updates the inputs directly.
+mountTokenPicker('param-token0-select', 'param-token0', 'token0-toggle')
+mountTokenPicker('param-token1-select', 'param-token1', 'token1-toggle')
 
 // Prevent picking the same token twice: each select disables the option the
 // other one has selected.
@@ -163,7 +136,6 @@ interface FaucetMeta {
   decimals: number
 }
 
-let launchedFaucetId: string | null = null
 let createdPoolId: string | null = null
 let running = false
 
@@ -206,138 +178,6 @@ function showStageRetry(): void {
   restartButton.hidden = false
 }
 
-/* Launchpad logic. */
-
-function renderLaunchSupplyHint(): void {
-  const raw = launchSupply.value.trim()
-  const decimals = Number(launchDecimals.value)
-  if (!raw || !Number.isInteger(decimals) || decimals < 0 || decimals > 8) {
-    setText(launchSupplyRaw, '')
-    return
-  }
-  try {
-    const amount = parseInitialSupply(raw, decimals)
-    setText(launchSupplyRaw, `= ${amount.toLocaleString('en-US')} base units`)
-  } catch {
-    setText(launchSupplyRaw, '')
-  }
-}
-
-function renderLaunchGating(): void {
-  launchButton.disabled = !walletStore.get().connected
-  launchButton.textContent = walletStore.get().connected ? 'Mint token' : 'Login to launch'
-}
-
-launchForm.addEventListener('submit', (event) => {
-  event.preventDefault()
-  void doLaunch()
-})
-
-launchSupply.addEventListener('input', renderLaunchSupplyHint)
-launchDecimals.addEventListener('input', renderLaunchSupplyHint)
-
-async function doLaunch(): Promise<void> {
-  launchButton.disabled = true
-  setText(launchStatus, '')
-  try {
-    const wallet = await walletAccountId()
-    if (!wallet) throw new Error('Login first.')
-
-    const symbolError = validateSymbol(launchSymbol.value)
-    if (symbolError) throw new Error(symbolError)
-    const symbol = normalizeSymbol(launchSymbol.value)
-
-    const decimals = Number(launchDecimals.value)
-    const decimalsError = validateDecimals(decimals)
-    if (decimalsError) throw new Error(decimalsError)
-
-    // Bound the supply by the XYK contract's MAX_AMOUNT, not an arbitrary cap.
-    const { MAX_AMOUNT } = await xykModule()
-    const supplyError = validateInitialSupply(launchSupply.value, decimals, MAX_AMOUNT)
-    if (supplyError) throw new Error(supplyError)
-    const supply = parseInitialSupply(launchSupply.value, decimals)
-
-    const [{ NetworkId, AccountInterface }, client] = await Promise.all([
-      sdkModule(),
-      getClient(),
-    ])
-
-    // Step 1: faucet account, built locally.
-    setText(launchStatus, 'Step 1/6: creating faucet account (local)')
-    const faucet = await client.accounts.create({
-      type: 'FungibleFaucet',
-      storage: 'public',
-      name: symbol,
-      symbol,
-      decimals,
-      maxSupply: supply,
-      // Permissionless: the whole supply is minted in one transaction and
-      // maxSupply equals it, so nothing is left to mint afterwards. No auth
-      // component keeps the account code small and browser execution fast.
-    })
-
-    // The client runs in a Web Worker with its own WASM instance. Every
-    // client call below must pass the hex string, never a main-thread
-    // AccountId/Account object, or the worker receives a foreign handle
-    // and reports "null pointer passed to rust".
-    const faucetIdHex = faucet.id().toString()
-
-    // Step 2: the wallet funds the new faucet with the chain fee asset.
-    const faucetAddress = faucet.id().toBech32(
-      NetworkId.testnet(),
-      AccountInterface.BasicWallet,
-    )
-    setText(launchStatus, 'Step 2/6: requesting faucet funding from wallet')
-    const sendTxId = await sendViaWallet(
-      faucetAddress,
-      CONFIG.chainFeeFaucetId,
-      FAUCET_FUNDING_AMOUNT,
-    )
-    setText(launchStatus, 'Step 3/6: waiting for funding to confirm')
-    await waitForTransaction(sendTxId)
-
-    // Step 3: consume the funding note (first tx) and mint the supply.
-    setText(launchStatus, 'Step 4/6: waiting for funding note in sync')
-    const noteId = await waitForFundingNote(client, faucetIdHex)
-    if (!noteId) {
-      throw new Error('Funding note not found within the sync window.')
-    }
-
-    setText(launchStatus, 'Step 5/6: consuming note (creates faucet on-chain)')
-    await client.syncChain()
-    await client.transactions.consume({
-      account: faucetIdHex,
-      notes: [noteId],
-      waitForConfirmation: true,
-    })
-
-    setText(launchStatus, 'Step 6/6: minting initial supply')
-    await client.syncChain()
-    await client.transactions.mint({
-      account: faucetIdHex,
-      to: wallet.toString(),
-      amount: supply,
-      type: 'public',
-      waitForConfirmation: true,
-    })
-
-    launchedFaucetId = faucetIdHex
-    launchFaucetId.setAttribute('title', launchedFaucetId)
-    setText(launchFaucetId, `${symbol} · ${shortHex(launchedFaucetId)}`)
-    launchResult.hidden = false
-    setText(launchStatus, 'Launched')
-    launchSymbol.value = ''
-    launchSupply.value = DEFAULT_INITIAL_SUPPLY
-    renderLaunchSupplyHint()
-    toast(`${symbol} launched: full supply minted to your wallet.`)
-  } catch (error) {
-    console.error('[launch]', error)
-    setText(launchStatus, error instanceof Error ? error.message : String(error))
-  } finally {
-    renderLaunchGating()
-  }
-}
-
 /** Polls the client store for an input note an account can consume. */
 async function waitForFundingNote(
   client: Awaited<ReturnType<typeof getClient>>,
@@ -355,22 +195,6 @@ async function waitForFundingNote(
   }
   return null
 }
-
-launchUseToken0.addEventListener('click', () => {
-  if (!launchedFaucetId) return
-  token0Picker.setValue(launchedFaucetId)
-  launchUseToken0.disabled = true
-  launchUseToken0.textContent = 'Token 0 ✓'
-  toast('Token 0 set to the launched token.')
-})
-
-launchUseToken1.addEventListener('click', () => {
-  if (!launchedFaucetId) return
-  token1Picker.setValue(launchedFaucetId)
-  launchUseToken1.disabled = true
-  launchUseToken1.textContent = 'Token 1 ✓'
-  toast('Token 1 set to the launched token.')
-})
 
 /* Pool creation. */
 
@@ -832,9 +656,6 @@ registerForm.addEventListener('submit', (event) => {
 restoreDraft()
 renderFeeBreakdown()
 renderGating()
-renderLaunchGating()
-renderLaunchSupplyHint()
 walletStore.subscribe(() => {
   renderGating()
-  renderLaunchGating()
 })

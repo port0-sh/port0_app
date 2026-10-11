@@ -16,6 +16,21 @@
   --error: #f200b9;
 }
 
+/*
+ * ASCII art font, self-hosted. `aahub_light` combines monapo (SIL OFL 1.1) with
+ * IPA Gothic (IPA Font License 1.0) so Japanese ASCII art keeps the widths its
+ * authors assumed; the licences travel with the font in `public/fonts/`.
+ */
+@font-face {
+  font-family: "aahub_light";
+  src:
+    url("/fonts/aahub_light.woff2") format("woff2"),
+    url("/fonts/aahub_light.woff") format("woff");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -77,8 +92,10 @@ a:active {
   opacity: 0.85;
 }
 
+/* A figure worth reading at a glance. The purple is reserved for the brand
+   name and the logo, so a figure is green like the other live numbers. */
 .accent {
-  color: var(--purple);
+  color: var(--green);
 }
 
 .error {
@@ -118,6 +135,7 @@ a:active {
 }
 
 @media (max-width: 700px) {
+
   /* Two rows: brand + wallet, then the nav on its own line, so neither the
      links nor the address chip can push the page wider than the viewport. */
   .header {
@@ -151,15 +169,15 @@ a:active {
     align-items: stretch;
   }
 
-  .form-grid > label {
+  .form-grid>label {
     margin-top: 0.35rem;
   }
 
-  .form-grid > input,
-  .form-grid > select,
-  .form-grid > .token-picker,
-  .form-grid > .fee-tiers,
-  .form-grid > .input-row {
+  .form-grid>input,
+  .form-grid>select,
+  .form-grid>.token-picker,
+  .form-grid>.fee-tiers,
+  .form-grid>.input-row {
     width: 100%;
     min-width: 0;
   }
@@ -722,6 +740,37 @@ dialog.modal::backdrop {
   letter-spacing: 0.02em;
 }
 
+/* The home page's name, directly under the artwork. Centered with the slogan
+   and the menu row: none of them is inside a `pre`, so text-align is safe. */
+#brand-heading {
+  margin: 0;
+  font-size: clamp(2.5rem, 9vw, 4.5rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--purple);
+  text-align: center;
+}
+
+.brand-slogan {
+  /* One line below the name, a step larger than body text. */
+  margin: 1rem 0 0;
+  font-size: 1.25rem;
+  text-align: center;
+}
+
+/*
+ * The index page's sections and wallet control, under the slogan. It replaces
+ * the header that every other page carries, so the drawing leads the page.
+ */
+.menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+  margin: 1.5rem 0 2rem;
+}
+
 .lede {
   margin: 0;
   max-width: 74ch;
@@ -769,6 +818,7 @@ dialog.modal::backdrop {
   display: block;
   font-weight: bold;
   white-space: nowrap;
+  color: var(--green);
 }
 
 .pool-table .figure {
@@ -914,4 +964,95 @@ dialog.modal::backdrop {
 #pool-filter {
   width: 22ch;
   padding: 0.2rem 0.5ch;
+}
+
+/* Banner artwork. Only this uses the ASCII art font. */
+
+#site-banner {
+  margin: 0 0 1.5rem;
+  /* Scrollable for a wide drawing on a narrow screen, with one character of
+     inline padding so the swell cannot add or remove a scrollbar. No
+     `text-align` here: it is inherited, and centering each line of a `pre`
+     independently shears the drawing. The block is centered by its own
+     margins instead. */
+  overflow-x: auto;
+  padding-inline: 1ch;
+}
+
+/*
+ * The artwork itself. ASCII art is drawn for one font's character widths, so the
+ * bundled font must reach the <pre> that holds it: the generic `monospace`
+ * family resolves to a different font per platform and the drawing shears.
+ * `line-height: 1` keeps rows adjacent the way the art assumes.
+ */
+.banner-source {
+  /* A block of its own width, centered by margins. `max-content` keeps each
+     line's characters where the artist put them; `text-align: left` states the
+     alignment outright so no inherited value can shear the drawing. */
+  display: block;
+  width: max-content;
+  margin-inline: auto;
+  text-align: left;
+  font-family: "aahub_light", "MS PGothic", "MS Gothic", monospace;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--white);
+  white-space: pre;
+  tab-size: 2;
+}
+
+/*
+ * The leading characters of a sea row. Inline-block because a transform does not
+ * apply to a non-replaced inline box; the font and line height are inherited, so
+ * it sits on the same baseline as the text around it. Each row runs on its own
+ * delay and period, so the rows drift out of step and read as water. The rest of
+ * the row does not move: it carries the boat's reflection and the far edge of
+ * the drawing.
+ */
+.banner-swell {
+  display: inline-block;
+  animation-name: sea-swell;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+
+@keyframes sea-swell {
+  from {
+    transform: translateX(-2ch) translateY(-0.1ch);
+  }
+
+  to {
+    transform: translateX(0ch) translateY(0ch);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .banner-swell {
+    animation: none;
+  }
+}
+
+
+.banner-caption {
+  margin: 0.5rem 0 0;
+  font-size: 0.85em;
+}
+
+/* A row is the link, not just the pair name: the anchor is stretched over it. */
+
+.pool-table tbody tr {
+  position: relative;
+  cursor: pointer;
+}
+
+.pool-table .row-link {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.pool-table .row-link:focus-visible {
+  outline: 1px solid var(--green);
+  outline-offset: -1px;
 }

@@ -65,7 +65,9 @@ export async function mountPriceChart(
     },
   })
   const series: ISeriesApi<'Candlestick'> = chart.addSeries(CandlestickSeries, {
-    upColor: theme.up,
+    // Hollow up candles, filled down candles: the convention on most trading
+    // desks. A transparent fill lets the grid show through the body.
+    upColor: 'rgba(0, 0, 0, 0)',
     downColor: theme.down,
     borderUpColor: theme.up,
     borderDownColor: theme.down,

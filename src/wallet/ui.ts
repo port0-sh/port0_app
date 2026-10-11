@@ -12,6 +12,7 @@ import { WalletReadyState } from '@miden-sdk/miden-wallet-adapter-base'
 import { CONFIG } from '../lib/config'
 import { clear, el } from '../lib/dom'
 import { shortAddress } from '../lib/format'
+import { openOneTimeMint } from '../features/oneTimeMint'
 import { openSendPublicNote } from '../features/sendPublicNote'
 import { openModal } from '../ui/modal'
 import { toast } from '../ui/toast'
@@ -70,6 +71,19 @@ export function mountWallet(): void {
       'div',
       { class: 'menu', role: 'menu', hidden: true },
       el('p', { class: 'menu-label' }, 'Utils'),
+      el(
+        'button',
+        {
+          class: 'menu-item',
+          type: 'button',
+          role: 'menuitem',
+          onclick: () => {
+            close()
+            openOneTimeMint()
+          },
+        },
+        'One-time mint',
+      ),
       el(
         'button',
         {

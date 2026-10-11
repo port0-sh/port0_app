@@ -201,7 +201,14 @@ function poolRow(pool: IndexerPool): HTMLTableRowElement {
     el(
       'td',
       {},
-      el('a', { class: 'pair', href: link }, `${view.token0Symbol} / ${view.token1Symbol}`),
+      // Stretched over the row, so the whole row opens the pool rather than the
+      // pair name alone.
+      el('a', {
+        class: 'row-link',
+        href: link,
+        'aria-label': `Open ${view.token0Symbol} / ${view.token1Symbol}`,
+      }),
+      el('span', { class: 'pair' }, `${view.token0Symbol} / ${view.token1Symbol}`),
       el('span', { class: 'sub mono', title: id }, shortHex(id)),
     ),
     el(
@@ -224,7 +231,7 @@ function poolRow(pool: IndexerPool): HTMLTableRowElement {
     ),
     el('td', { class: 'num' }, el('span', { class: 'figure' }, formatBps(BigInt(pool.lp_fee_bps)))),
     yieldCell(pool),
-    el('td', { class: 'open-col' }, el('a', { class: 'open', href: link, 'aria-label': 'Open pool' }, '→')),
+    el('td', { class: 'open-col' }, el('span', { class: 'open', 'aria-hidden': 'true' }, '→')),
   )
 }
 
