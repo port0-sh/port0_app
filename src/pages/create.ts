@@ -8,16 +8,17 @@
  * Pool wizard, three irreversible steps, each marked as it completes:
  *   1. Build the pool account locally (createPoolAccount inserts it into the
  *      client store; nothing touches the chain).
- *   2. Deploy it with a scriptless transaction. Network accounts have no key
- *      and forbid tx scripts, so anyone can submit the deploy; the app's own
- *      client does it, no wallet needed.
- *   3. Send the admin configuration note from the creator's wallet. This one
- *      requires the wallet because the admin account signs it.
+ *   2. Fund it with a wallet note, then consume that note as the pool's first
+ *      transaction. A 0.17 network auth rejects a transaction with no effect,
+ *      so the funding note both commits the pool and pays its first fee. The
+ *      app's own client submits the consume; the wallet sends the funding.
+ *   3. Emit the register note from the creator's wallet. The registry verifies
+ *      the pool code commitment and identity by foreign procedure invocation.
  *
  * Fee model: LP fee is one of the three Uniswap tiers (0.05% / 0.30% /
- * 1.00%). The protocol fee is 1/6 of the LP fee, sent to the platform fee
- * recipient from VITE_PROTOCOL_FEE_RECIPIENT; users never set it. Network
- * note fees are denominated in the configured USDC faucet asset.
+ * 1.00%); the registry lists the allowed tiers. The protocol's cut is a share
+ * of the LP fee, read from the registry, and carved out of it. Network note
+ * fees are denominated in the chain's fee asset.
  *
  * The SDK loads on first use; the page shell and the forms render
  * without it.

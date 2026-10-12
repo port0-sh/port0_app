@@ -67,8 +67,8 @@
         MidenXYK is an XYK (constant-product) AMM. A pool holds two fungible assets and
         enforces the invariant <span class="mono">x · y = k</span> between their
         reserves. A swap adds one asset and removes the other at the price the product
-        implies, minus a fee that accrues to liquidity providers and, on a fixed
-        per-tier schedule, to the protocol fee recipient.
+        implies, minus a fee that accrues to liquidity providers and, at the
+        registry's rate, to the protocol account.
       </p>
       <p>
         Each pool is a single public Miden account. Its logic lives in an account
@@ -87,7 +87,7 @@
         </div>
         <div>
           <dt>LP supply</dt>
-          <dd>The pool issues its own LP faucet. LPs hold it in proportion to their share of the reserves.</dd>
+          <dd>The pool issues its own LP token as a native fungible asset. LPs hold it in proportion to their share of the reserves.</dd>
         </div>
         <div>
           <dt>LP fee</dt>
@@ -95,7 +95,7 @@
         </div>
         <div>
           <dt>Protocol fee</dt>
-          <dd>Fixed by tier (1, 2, or 5 bps) and sent to the platform fee recipient.</dd>
+          <dd>A share of the LP fee, fixed by the registry and sent to the protocol account. The swapper pays the LP fee tier and nothing more.</dd>
         </div>
       </dl>
       <p class="muted">

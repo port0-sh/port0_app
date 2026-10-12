@@ -36,7 +36,7 @@ npm run build      # tsc -b && vite build → dist/
 npm run preview    # serve dist/ locally
 ```
 
-The build output is plain static files (`dist/`): three HTML documents, one
+The build output is plain static files (`dist/`): four HTML documents, one
 CSS file, one small JS bundle per page, and a shared lazy chunk containing the
 Miden SDK. Deploy `dist/` to any static file host.
 
@@ -62,18 +62,20 @@ Environment variables are read at build time (`import.meta.env`):
 | ------------------------------ | ------------------------------ | ------------------------------------------ |
 | `VITE_MIDEN_RPC_URL`           | `https://rpc.testnet.miden.io` | Miden node RPC for on-chain reads          |
 | `VITE_CHAIN_FEE_FAUCET_ID`     | `0x4cbdcaffe75f0a317482224dae6436` | Faucet of the chain's fee asset (0.17 testnet protocol configuration) |
-| `VITE_PROTOCOL_FEE_RECIPIENT`  | (empty)                        | Platform fee recipient; pool creation fails when unset |
+| `VITE_PROTOCOL_FEE_RECIPIENT`  | (empty)                        | Platform fee recipient, displayed and required for creation; the on-chain destination lives in the registry |
 | `VITE_REGISTRY_ID`             | (empty)                        | On-chain pool registry account; empty skips registration |
 | `VITE_REGISTRY_REGISTER_FEE`   | `0`                            | Register note consumption fee, in the registry's fee asset |
-| `VITE_INDEXER_URL`             | (empty)                        | Indexer base URL; empty keeps per-pool chain reads |
+| `VITE_INDEXER_URL`             | (empty)                        | Indexer base URL; empty disables browsing and the pool page |
 | `VITE_PARA_API_KEY`            | (empty)                        | Para API key; empty keeps the Para option disabled |
 | `VITE_PARA_ENVIRONMENT`        | `BETA`                         | Para environment; `PRODUCTION` for production builds |
 
 `VITE_PROTOCOL_FEE_RECIPIENT` accepts a hex account id or a bech32 address.
-It is displayed on the create page and never editable by users.
+It gates pool creation on the create page. The pool's actual protocol fee
+destination is `protocol_fee_to` in the registry; the create page reads the
+registry's fee policy and builds the pool with the registry's rate.
 
 `VITE_REGISTRY_ID` accepts a hex account id or a bech32 address. When set,
-the create flow emits a register note after the admin configuration. The
+the create flow emits a register note after the pool is deployed. The
 register note is a network note consumed by the registry account; registration
 is asynchronous, the wallet confirms emission and the node's transaction
 builder consumes the note in a later block. `VITE_REGISTRY_REGISTER_FEE` must
@@ -93,17 +95,26 @@ the 0.17 testnet only.
 ## Architecture
 
 ```
-index.html  pool.html  create.html     one real HTML entry per page
-src/styles/global.css                  hand-written stylesheet, PICO-8 palette
+index.html  pool.html  create.html  about.html   one real HTML entry per page
+src/styles/global.css                            hand-written stylesheet
+src/assets/branding/                             hero.html and logo.html drawings
 src/lib/
-  config.ts     resolved runtime configuration
+  brand.ts      branding env values
   client.ts     lazy MidenClient/XykClient singletons (SDK loads on first use)
-  indexer.ts    pool source: indexer fetch plus fee-schedule root mapping
-  history.ts    exact price ratios and chart series (tested)
-  chart.ts      TradingView lightweight-charts area series, imported on demand
-  format.ts     bigint-exact amount parsing/formatting, id shortening, bps
-  state.ts      ~30-line pub/sub store; the entire state layer
+  config.ts     resolved runtime configuration
+  chart.ts      TradingView lightweight-charts candlesticks, imported on demand
   dom.ts        el()/qs()/clear() DOM helpers
+  fees.ts       LP fee tiers
+  format.ts     bigint-exact amount parsing/formatting, id shortening, bps
+  history.ts    exact price ratios and chart series (tested)
+  indexer.ts    pool source: indexer fetch plus fee-schedule root mapping
+  site.ts       footer year and the one-time testnet disclaimer
+  state.ts      ~30-line pub/sub store; the entire state layer
+  token.ts      launchpad token validation
+src/features/
+  oneTimeMint.ts    fixed-supply faucet launcher
+  sendPublicNote.ts public-note sender
+  tokenPicker.ts    wallet-token picker with a manual fallback
 src/ui/
   toast.ts      notification stack
   modal.ts      native <dialog> wrapper
@@ -113,11 +124,12 @@ src/wallet/
 src/pages/
   home.ts       pool table from the indexer, 15 s refresh while visible
   pool.ts       state summary, quotes, swap/add/remove, history chart
-  create.ts     pool deployment and registration
+  create.ts     pool and launchpad deployment, registration
+  about.ts      the site chrome on the about page
 ```
 
-The home page loads the SDK only to map the fee schedule roots to note kinds;
-the table itself renders from the indexer. The Login button is plain HTML plus
+The home page never loads the SDK: the table renders from the indexer, and
+`toPoolView` is called without note-fee mapping. The Login button is plain HTML plus
 a light module; the wallet adapter and the WASM stack behind it load on first
 connect. `pool.html` and `create.html` load the SDK lazily on first use, so
 every page shell renders without WASM on the critical path.
@@ -127,10 +139,11 @@ every page shell renders without WASM on the critical path.
 Pools come from the on-chain registry. The registry account holds three
 storage maps: the accepted pool code commitments, the pool set, and the
 ordered asset pair index. A pool is registered by a register note emitted by
-the creator after the admin configuration; the node's transaction builder
+the creator after the pool is deployed; the node's transaction builder
 consumes it against the registry, and the registry verifies the pool code
-commitment by foreign procedure invocation against the pool's `CodeInspection`
-component.
+commitment and the pool's registry identity by foreign procedure invocation
+against the pool's `CodeInspection` component and `get_registry_identity`
+procedure.
 
 The SDK performs registration (`registerPool`), and the indexer polls the
 registry for the pool set. The app reads everything from the indexer: pool
@@ -144,14 +157,16 @@ schedule roots to note kinds through the SDK's compiled note scripts.
 
 ## Pool list
 
-The home page lists every pool the indexer serves, polled every 15 s while the
- tab is visible. Each row carries the pair and its short pool id, the price of
-one token0 in token1, both reserves, 24-hour volume in both tokens, the LP fee,
-and the fee yield with the window it is annualised over. Rows are ordered by
-pair name so a row keeps its place between refreshes. The page needs no chain
-read and no WASM: prices come from the indexer's reserves through the same
-exact bigint arithmetic the pool page uses, and `toPoolView` is called without
-note-fee mapping, which is the only reason that module would import the SDK.
+The home page lists the pools the indexer serves, 50 per page, polled every
+15 s while the tab is visible. Each row carries the pair and its short pool id,
+the price of one token0 in token1, both reserves, 24-hour volume in both
+tokens, the LP fee, and the fee yield with the window it is annualised over.
+Rows are ordered by pair name so a row keeps its place between refreshes; a
+filter accepts a faucet id, and **Load more** walks the indexer's keyset cursor.
+The page needs no chain read and no WASM: prices come from the indexer's
+reserves through the same exact bigint arithmetic the pool page uses, and
+`toPoolView` is called without note-fee mapping, which is the only reason that
+module would import the SDK.
 
 ## Pool page
 
@@ -170,8 +185,8 @@ therefore polls the chain state, wallet balances, the indexer record, and the
 history every 5 s for up to 60 s, and stops as soon as reserves or LP supply
 change.
 
-History comes from `GET /pools/{id}/history` at 1m, 5m, or 1h resolution and is
-drawn with TradingView's `lightweight-charts` as candlesticks with crosshair,
+History comes from `GET /pools/{id}/history` at 1m, 5m, 1h, 6h, or 1d
+resolution and is drawn with TradingView's `lightweight-charts` as candlesticks with crosshair,
 price line, and a last-value label. The picker offers 1m, 5m, 1h, 6h, and 1d,
 which are the indexer's five retention tiers. The library is the largest dependency in
 the app and only this page uses it, so `src/lib/chart.ts` imports it on demand.
@@ -270,8 +285,11 @@ are the maximum of the wall clock and the pool's last-seen block timestamp,
 plus one hour (`DEADLINE_MARGIN_SECONDS` in `src/pages/pool.ts`).
 
 The deploy step of pool creation is an exception: the pool is a network
-account without a key, and its scriptless deploy transaction can be submitted
-by anyone, so the app's own client submits it directly.
+account without a key. The wallet sends a small chain fee asset note to the
+pool address, and the app's own client consumes that note as the pool's first
+transaction, which commits the account and pays its first fee. There is no
+scriptless deploy, because the 0.17 network auth rejects a transaction with no
+effect.
 
 ## Launchpad
 
@@ -282,10 +300,10 @@ so nobody can mint more. The launched faucet id can fill either token field
 of the pool form with one click.
 
 Funding: a fresh faucet has an empty vault and cannot pay the fee of its own
-first transaction, so the connected wallet sends 0.000420 USDCX (the chain
+first transaction, so the connected wallet sends 0.000266 USDCX (the chain
 fee asset) to the new faucet: exactly the two transaction fees it will pay
-(consume + mint, 2 × 210 base units at the testnet's per-transaction
-maximum). The faucet's first transaction consumes that note, which creates
+(consume + mint, 2 × 133 base units at the measured testnet fee). The faucet's
+first transaction consumes that note, which creates
 the faucet on-chain and pays its fee out of the received funds (the
 protocol's account-funding model). The supply mint follows as the second
 transaction.
@@ -297,10 +315,12 @@ amounts are u64 with u128 intermediates and 10_000 bps fee headroom).
 
 ## Fee model
 
-LP fees follow Uniswap's three tiers: 0.05%, 0.30%, and 1.00%. The protocol
-fee is a fixed value per tier: 1 bps at 0.05%, 2 bps at 0.30%, 5 bps at
-1.00%. It always goes to `VITE_PROTOCOL_FEE_RECIPIENT`; the create page
-displays the value and does not let users change it.
+LP fees follow Uniswap's three tiers: 0.05%, 0.30%, and 1.00%. The protocol's
+cut is a share of the LP fee, not a per-tier surcharge: the pool is built with
+`protocol_fee_share_bps` read from the registry, and the swapper pays the LP fee
+tier and nothing more. The registry's `register` procedure rejects a pool built
+with any other rate. `VITE_PROTOCOL_FEE_RECIPIENT` gates pool creation on the
+create page; the destination the pools pay is `protocol_fee_to` in the registry.
 
 Network note fees are denominated in the chain's fee asset, paid to the
 chain's own fee faucet (`VITE_CHAIN_FEE_FAUCET_ID`). This is not a choice:
@@ -322,7 +342,7 @@ The pinned version matrix:
 
 | Package                                    | Version |
 | ------------------------------------------ | ------- |
-| `@miden-sdk/miden-sdk`                     | 0.17.0  |
+| `@miden-sdk/miden-sdk`                     | 0.17.1  |
 | `@miden-sdk/miden-wallet-adapter-base`     | 0.17.0  |
 | `@miden-sdk/miden-wallet-adapter-miden`    | 0.17.0  |
 | `@miden-sdk/para`                          | 0.17.0  |

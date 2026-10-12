@@ -38,8 +38,8 @@ npm run build
 npm run pool:commitment
 ```
 
-Prints the accepted pool code commitment, for example
-`0x522ed558f58b98584ee0ad2561ebb134adee52091f98d052686d966c907df5f7`. The value
+Prints the accepted pool code commitment, currently
+`0x9c702bd2ec00883a8f24228e022e9045523e809ae32e9226187463be8f59f202`. The value
 covers the pool's full component set: the `miden-xyk` component,
 `CodeInspection`, the network-account auth, and the fee-policy components. It
 changes whenever any of those change, and the registry must be seeded with the
@@ -134,11 +134,15 @@ const client = await MidenClient.create({
 });
 const xyk = XykClient.from(client);
 
-// 1. Build the pool account locally.
+// 1. Build the pool account locally. Fees, the P2ID root, and the registry
+// pointer are initial storage; the LP token key is derived by the contract.
 const account = await xyk.createPoolAccount({
   token0Key,
   token1Key,
-  admin,
+  registryId,
+  lpFeeBps: 30n,
+  protocolFeeShareBps,
+  p2idRoot,
   feeFaucetId,
   noteFees,
 });
@@ -146,14 +150,14 @@ const poolId = account.id();
 
 // 2. Fund it, then 3. deploy by consuming the funding note.
 const { txId: fundTx } = await client.transactions.send({
-  account: admin.toString(),
+  account: sender.toString(),
   to: poolId.toString(),
   token: feeFaucetId,
   amount: 133n,
   type: "public",
   waitForConfirmation: true,
 });
-await client.sync();
+await client.syncChain();
 const consumable = await client.notes.listAvailable({ account: poolId.toString() });
 await xyk.deployPoolAccount(poolId, consumable[0].id().toString(), {
   waitForConfirmation: true,
@@ -164,7 +168,7 @@ await xyk.deployPoolAccount(poolId, consumable[0].id().toString(), {
 // derived by the contract.
 await xyk.registerPool(
   { registryId, feeFaucetId, registerFee },
-  { sender: admin, poolId, asset0: token0FaucetId, asset1: token1FaucetId },
+  { sender, poolId, asset0: token0FaucetId, asset1: token1FaucetId },
   { submit: true, waitForConfirmation: true },
 );
 ```
@@ -174,7 +178,7 @@ await xyk.registerPool(
 | Data | Source |
 | --- | --- |
 | Pool set | Registry `pools` map |
-| Reserves, LP supply, pot, fees, oracle | The pool's eleven value slots and its vault |
+| Reserves, LP supply, pot, fees, oracle | The pool's ten value slots and its vault |
 | Token symbols and decimals | Each faucet's `token_config` slot |
 | Note fee schedule and fee asset | The pool's `fee_asset_id` value slot and the `basic_constant_fee` schedule map |
 | Activity and 24 h aggregates | Classified reserve and pot deltas between polls |

@@ -53,9 +53,10 @@ export const CONFIG = {
     import.meta.env.VITE_CHAIN_FEE_FAUCET_ID?.trim() || DEFAULT_CHAIN_FEE_FAUCET_ID,
 
   /**
-   * Platform fee recipient: every pool the app deploys sends its protocol fee
-   * here. Account id in hex or bech32. Displayed on the create page, never
-   * user-settable. Empty string when unset; pool creation then fails.
+   * Platform fee recipient. Pool creation is gated on this value; the pools
+   * pay the registry's `protocol_fee_to`, which the create flow reads from the
+   * registry. Account id in hex or bech32. Empty string when unset; pool
+   * creation is then disabled.
    */
   protocolFeeRecipient: import.meta.env.VITE_PROTOCOL_FEE_RECIPIENT?.trim() ?? '',
 
@@ -68,7 +69,7 @@ export const CONFIG = {
 
   /**
    * On-chain pool registry account. When set, pool creation emits a register
-   * note after the admin configuration. Empty disables registration.
+   * note after the pool is deployed. Empty disables registration.
    */
   registryId: import.meta.env.VITE_REGISTRY_ID?.trim() ?? '',
 
