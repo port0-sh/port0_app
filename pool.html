@@ -1,18 +1,47 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-notice-key="miden-xyk-app:testnet-disclaimer:v1">
 <head>
   <meta charset="UTF-8" />
-  <title>Miden XYK — Pool</title>
+  <title>%VITE_BRAND_NAME% — Pool</title>
   <meta name="description" content="Swap, deposit, and withdraw on a MidenXYK pool." />
+  <meta property="og:site_name" content="%VITE_BRAND_NAME%" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="%VITE_BRAND_NAME% — Pool" />
+  <meta property="og:description" content="Swap, deposit, and withdraw on a MidenXYK pool." />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="%VITE_BRAND_NAME% — Pool" />
+  <meta name="twitter:description" content="Swap, deposit, and withdraw on a MidenXYK pool." />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/src/styles/global.css" />
+  <script>
+    // Hides the testnet notice before the first paint when it was dismissed.
+    try {
+      if (localStorage.getItem(document.documentElement.dataset.noticeKey) === '1') {
+        document.documentElement.dataset.notice = 'dismissed'
+      }
+    } catch {
+      // Storage unavailable: the notice stays visible, which is the safe default.
+    }
+  </script>
 </head>
 <body data-page="Pool">
+
+  <div id="testnet-notice">
+    <p>
+      <strong class="error">Testnet only.</strong> These are test tokens, not real money.
+      MidenXYK runs on the Miden testnet: the network can be reset, and pools and balances can
+      disappear. The app and the contracts are a work in progress, so interfaces, contracts, and
+      fees can change without notice. Do not send mainnet assets. Nothing here is financial
+      advice.
+    </p>
+    <button type="button" class="btn" id="notice-dismiss">Dismiss</button>
+  </div>
+
   <header class="header">
     <a class="brand" href="/">
       <img src="/favicon.svg" alt="" class="brand-mark" width="28" height="28" />
-      <span class="brand-name">port0.sh</span>
+      <span class="brand-name">%VITE_BRAND_NAME%</span>
     </a>
     <nav class="nav">
       <a href="/">Pools</a>
@@ -163,7 +192,7 @@
     </section>
   </main>
 
-  <footer class="footer">Copyright © <span id="footer-year">2026</span> <span id="footer-brand">port0.sh</span></footer>
+  <footer class="footer">Copyright © <span id="footer-year">2026</span> <span id="footer-brand">%VITE_BRAND_NAME%</span></footer>
 
   <div id="toast-root" class="toast-root" aria-live="polite"></div>
   <script type="module" src="/src/pages/pool.ts"></script>

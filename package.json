@@ -6,8 +6,11 @@
   "description": "Static web app for the MidenXYK constant-product AMM: browse pools, swap, deposit, withdraw, create pools.",
   "scripts": {
     "dev": "vite",
+    "dev:neutral": "vite --mode neutral --port 5180 --strictPort",
     "build": "tsc -b && vite build",
+    "build:neutral": "tsc -b && vite build --mode neutral --outDir dist-neutral",
     "preview": "vite preview",
+    "preview:neutral": "vite preview --mode neutral --outDir dist-neutral --port 4180 --strictPort",
     "lint": "oxlint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

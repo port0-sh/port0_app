@@ -1,20 +1,53 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-notice-key="miden-xyk-app:testnet-disclaimer:v1">
 <head>
   <meta charset="UTF-8" />
-  <title>Miden XYK — Pools</title>
+  <title>%VITE_BRAND_NAME% — Pools</title>
   <meta name="description" content="Browse, swap on, and provide liquidity to MidenXYK constant-product pools on Miden." />
+  <meta property="og:site_name" content="%VITE_BRAND_NAME%" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="%VITE_BRAND_NAME% — Pools" />
+  <meta property="og:description" content="Browse, swap on, and provide liquidity to MidenXYK constant-product pools on Miden." />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="%VITE_BRAND_NAME% — Pools" />
+  <meta name="twitter:description" content="Browse, swap on, and provide liquidity to MidenXYK constant-product pools on Miden." />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="stylesheet" href="/src/styles/global.css" />
+  <script>
+    // Hides the testnet notice before the first paint when it was dismissed.
+    try {
+      if (localStorage.getItem(document.documentElement.dataset.noticeKey) === '1') {
+        document.documentElement.dataset.notice = 'dismissed'
+      }
+    } catch {
+      // Storage unavailable: the notice stays visible, which is the safe default.
+    }
+  </script>
 </head>
 <body data-page="Pools">
+
+  <div id="testnet-notice">
+    <p>
+      <strong class="error">Testnet only.</strong> These are test tokens, not real money.
+      MidenXYK runs on the Miden testnet: the network can be reset, and pools and balances can
+      disappear. The app and the contracts are a work in progress, so interfaces, contracts, and
+      fees can change without notice. Do not send mainnet assets. Nothing here is financial
+      advice.
+    </p>
+    <button type="button" class="btn" id="notice-dismiss">Dismiss</button>
+  </div>
 
   <main class="container">
     <div id="site-banner" hidden></div>
 
-    <h1 id="brand-heading">port0.sh</h1>
-    <p class="lede brand-slogan" id="brand-slogan" hidden></p>
+    <h1 id="brand-heading">%VITE_BRAND_NAME%</h1>
+
+    <div class="hero-cta">
+      <a class="btn" href="/create.html">Launch a pool</a>
+    </div>
+
+    <p class="brand-slogan" id="brand-slogan" hidden></p>
 
     <div class="menu-row">
       <nav class="nav" aria-label="Sections">
@@ -51,7 +84,7 @@
     </section>
   </main>
 
-  <footer class="footer">Copyright © <span id="footer-year">2026</span> <span id="footer-brand">port0.sh</span></footer>
+  <footer class="footer">Copyright © <span id="footer-year">2026</span> <span id="footer-brand">%VITE_BRAND_NAME%</span></footer>
 
   <div id="toast-root" class="toast-root" aria-live="polite"></div>
   <script type="module" src="/src/pages/home.ts"></script>

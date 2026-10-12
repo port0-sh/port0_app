@@ -175,15 +175,9 @@ a:active {
 
   .form-grid>input,
   .form-grid>select,
-  .form-grid>.token-picker,
-  .form-grid>.fee-tiers,
-  .form-grid>.input-row {
+  .form-grid>.fee-tiers {
     width: 100%;
     min-width: 0;
-  }
-
-  .token-picker {
-    flex-wrap: wrap;
   }
 
   .fee-tiers {
@@ -215,18 +209,6 @@ a:active {
 
 .brand:hover .brand-name {
   color: var(--white);
-}
-
-.brand-logo {
-  display: block;
-  image-rendering: pixelated;
-}
-
-.ascii-logo {
-  margin: 0;
-  font-size: 0.65rem;
-  line-height: 1.1;
-  color: var(--purple);
 }
 
 .brand-name {
@@ -343,12 +325,20 @@ th.mono {
 
 input,
 select,
-button {
+/*
+ * One control shape for a real button and for a link that must look like one.
+ * `display: inline-block` gives a link the same box a button has, and
+ * `text-decoration: none` keeps that box from reading as a link.
+ */
+button,
+.btn {
+  display: inline-block;
   font: inherit;
   color: var(--white);
   background-color: var(--black);
   border: 1px solid var(--dark-grey);
   padding: 0.4em 0.8ch;
+  text-decoration: none;
 }
 
 input:focus,
@@ -388,16 +378,6 @@ button:disabled {
   flex-wrap: wrap;
 }
 
-.input-row {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.input-row input {
-  flex: 1;
-  min-width: 0;
-}
-
 .btn {
   cursor: pointer;
 }
@@ -417,15 +397,6 @@ button:disabled {
 .btn-primary:hover:not(:disabled) {
   background-color: var(--green);
   color: var(--black);
-}
-
-.btn-link {
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--green);
-  font-weight: bold;
-  cursor: pointer;
 }
 
 /* Tabs */
@@ -477,10 +448,6 @@ button:disabled {
   font-weight: bold;
 }
 
-.break-all {
-  word-break: break-all;
-}
-
 /* Token picker */
 
 .pct-buttons {
@@ -498,18 +465,6 @@ button:disabled {
   display: block;
   margin-top: 0.25rem;
   font-size: 0.9em;
-}
-
-.token-picker {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.token-picker select,
-.token-picker input {
-  flex: 1;
-  min-width: 0;
 }
 
 /* Quote box */
@@ -728,22 +683,10 @@ dialog.modal::backdrop {
   margin: 0.75rem 0 0;
 }
 
-/* Page header: title and one-line lede. */
-
-.page-head {
-  margin: 0.5rem 0 1.5rem;
-}
-
-.page-head h1 {
-  margin: 0 0 0.5rem;
-  font-size: 1.6em;
-  letter-spacing: 0.02em;
-}
-
 /* The home page's name, directly under the artwork. Centered with the slogan
    and the menu row: none of them is inside a `pre`, so text-align is safe. */
 #brand-heading {
-  margin: 0;
+  margin: 0 0 1.5rem;
   font-size: clamp(2.5rem, 9vw, 4.5rem);
   line-height: 1;
   letter-spacing: -0.02em;
@@ -752,9 +695,15 @@ dialog.modal::backdrop {
 }
 
 .brand-slogan {
-  /* One line below the name, a step larger than body text. */
-  margin: 1rem 0 0;
+  /*
+   * One line under the call to action, a step larger than body text. It does not
+   * carry the lead-paragraph class: that class zeroed every margin and was
+   * declared later in this file, so its rule won and left the slogan flush
+   * against the menu row.
+   */
+  margin: 0 0 1.5rem;
   font-size: 1.25rem;
+  color: var(--light-grey);
   text-align: center;
 }
 
@@ -768,13 +717,42 @@ dialog.modal::backdrop {
   justify-content: center;
   gap: 2rem;
   flex-wrap: wrap;
-  margin: 1.5rem 0 2rem;
+  margin: 0 0 2rem;
 }
 
-.lede {
+/*
+ * The testnet notice: a strip above the header, not a gate. It is part of the
+ * markup, so it reads without JavaScript, and the inline script in each page's
+ * head sets `data-notice="dismissed"` before the first paint once it has been
+ * dismissed, so a returning reader never sees it.
+ */
+#testnet-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  max-width: 90ch;
+  margin: 0.5rem auto 0;
+  padding: 0.5rem 1ch;
+  border: 1px solid var(--dark-grey);
+  font-size: 0.9em;
+}
+
+#testnet-notice p {
   margin: 0;
   max-width: 74ch;
-  color: var(--light-grey);
+}
+
+html[data-notice='dismissed'] #testnet-notice {
+  display: none;
+}
+
+/* The one call to action, centred under the name. */
+.hero-cta {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 1.5rem;
 }
 
 /* Toolbar above a list: a count on the left, actions on the right. */
@@ -1002,42 +980,11 @@ dialog.modal::backdrop {
 }
 
 /*
- * The leading characters of a sea row. Inline-block because a transform does not
- * apply to a non-replaced inline box; the font and line height are inherited, so
- * it sits on the same baseline as the text around it. Each row runs on its own
- * delay and period, so the rows drift out of step and read as water. The rest of
- * the row does not move: it carries the boat's reflection and the far edge of
- * the drawing.
+ * The drawing's move, and the keyframes it names, live in the drawing file:
+ * `src/assets/branding/hero.html`, or the `.local.html` that replaces it. The
+ * metrics a drawing needs to be legible at all stay here, in `.banner-source`,
+ * so a hero never paints unstyled while its own block is on the way.
  */
-.banner-swell {
-  display: inline-block;
-  animation-name: sea-swell;
-  animation-timing-function: ease-in-out;
-  animation-iteration-count: infinite;
-  animation-direction: alternate;
-}
-
-@keyframes sea-swell {
-  from {
-    transform: translateX(-2ch) translateY(-0.1ch);
-  }
-
-  to {
-    transform: translateX(0ch) translateY(0ch);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .banner-swell {
-    animation: none;
-  }
-}
-
-
-.banner-caption {
-  margin: 0.5rem 0 0;
-  font-size: 0.85em;
-}
 
 /* A row is the link, not just the pair name: the anchor is stretched over it. */
 

@@ -28,11 +28,9 @@ export const CONFIG = {
    */
   brand: {
     /** Wordmark and page-title name. */
-    name: import.meta.env.VITE_BRAND_NAME?.trim() || 'Miden XYK',
-    /** Single-line text mark, used when no logo image is given. */
+    name: import.meta.env.VITE_BRAND_NAME?.trim() || 'MidenXYK',
+    /** Single-line text mark beside the header logo. */
     logoText: import.meta.env.VITE_BRAND_LOGO_TEXT?.trim() ?? '',
-    /** Logo image path or URL. Takes precedence over `logoText`. */
-    logoImage: import.meta.env.VITE_BRAND_LOGO_IMAGE?.trim() ?? '',
     /** One line under the name on the home page; hidden when empty. */
     slogan: import.meta.env.VITE_BRAND_SLOGAN?.trim() ?? '',
   },

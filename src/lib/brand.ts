@@ -2,62 +2,42 @@
  * Branding.
  *
  * MidenXYK is the library; a deployment is a platform with its own name, mark,
- * and artwork. Everything here comes from configuration or from a file meant to
- * be edited by hand, so a fork rebrands without touching application code.
+ * and artwork. The name, the text mark, and the slogan come from configuration.
+ * The two drawings come from files meant to be edited by hand:
  *
- * The banner is `src/assets/banners/finished.html`, injected as it stands. It is
- * authored markup, not generated: the `<pre class="banner-source">` it contains
- * carries the artwork and the `<span class="banner-swell">` runs that move, and
- * `src/styles/global.css` carries the motion. The module does not parse, split,
- * or reassemble the drawing.
+ *   src/assets/branding/hero.html   the home page hero
+ *   src/assets/branding/logo.html   the mark in the header of the other pages
+ *
+ * A deployment overrides either one by adding a second file beside it, named
+ * `<slot>.<override>.html`, and setting `VITE_BRAND_OVERRIDE` to that override.
+ * With `VITE_BRAND_OVERRIDE=local`, `hero.local.html` wins over `hero.html`.
+ * Override names match `*.local.html`, which `.gitignore` excludes.
+ *
+ * Both files are inserted as they stand: nothing here parses, splits, or
+ * reassembles a drawing, and a drawing carries its own `<style>` when it needs
+ * motion of its own.
  */
 
-import finishedBanner from '../assets/banners/finished.html?raw'
 import { CONFIG } from './config'
-import { el } from './dom'
 
-/** Renders the header mark, the page title, the banner, and the home heading. */
+/** Lazy, so a page fetches only the drawing it shows. */
+const drawings = import.meta.glob('../assets/branding/*.html', {
+  query: '?raw',
+  import: 'default',
+}) as Record<string, () => Promise<string>>
+
+/** Override flavour selected by `VITE_BRAND_OVERRIDE`; empty uses the shipped file. */
+const OVERRIDE = (import.meta.env.VITE_BRAND_OVERRIDE ?? '').trim()
+
+/** Renders the brand slots a page provides: the hero, the mark, the heading. */
 export function mountBrand(): void {
-  setTitle()
-  renderHeaderMark()
-  renderBanner()
-  renderPageHeading()
-}
-
-/**
- * Page title as `<page> — <brand>`. The page name comes from `data-page` on the
- * body, so the platform's name is not written into any page's markup.
- */
-function setTitle(): void {
-  const page = document.body.dataset.page
-  if (!page) return
-  document.title = `${page} — ${CONFIG.brand.name}`
-}
-
-/** Replaces the header mark with the configured image, text, or brand name. */
-function renderHeaderMark(): void {
-  const host = document.querySelector('.brand')
-  const mark = host?.querySelector('.brand-mark')
-  const name = host?.querySelector('.brand-name')
-  if (!host || !mark || !name) return
-
-  if (CONFIG.brand.logoImage.length > 0) {
-    mark.replaceWith(
-      el('img', {
-        class: 'brand-logo',
-        src: CONFIG.brand.logoImage,
-        alt: '',
-        width: 28,
-        height: 28,
-      }),
-    )
-  }
-  name.textContent = CONFIG.brand.logoText || CONFIG.brand.name
-  host.setAttribute('aria-label', CONFIG.brand.name)
+  renderHeading()
+  void renderLogo()
+  void renderHero()
 }
 
 /** Fills the home page's name and slogan when the page provides slots for them. */
-function renderPageHeading(): void {
+function renderHeading(): void {
   const heading = document.getElementById('brand-heading')
   if (heading) heading.textContent = CONFIG.brand.name
   const slogan = document.getElementById('brand-slogan')
@@ -67,14 +47,47 @@ function renderPageHeading(): void {
 }
 
 /**
- * Fills `#site-banner` when a page provides one, with the banner file verbatim.
- *
- * The markup is a build-time asset of this repository, so it is inserted as
- * markup rather than text. Nothing here rewrites it.
+ * Replaces the header mark with `logo.html` when the deployment ships one. An
+ * empty file leaves the markup the page shipped with, so a header never depends
+ * on JavaScript to appear.
  */
-function renderBanner(): void {
+async function renderLogo(): Promise<void> {
+  const host = document.querySelector<HTMLElement>('.brand')
+  const mark = host?.querySelector('.brand-mark')
+  const name = host?.querySelector('.brand-name')
+  if (!host || !mark || !name) return
+
+  const html = await load('logo')
+  if (html.trim().length > 0) mark.replaceWith(...fragment(html))
+  name.textContent = CONFIG.brand.logoText || CONFIG.brand.name
+  host.setAttribute('aria-label', CONFIG.brand.name)
+}
+
+/**
+ * Fills `#site-banner` with `hero.html`, or with the logo when the hero is
+ * empty, so a deployment that ships no hero still shows a mark.
+ */
+async function renderHero(): Promise<void> {
   const host = document.querySelector<HTMLElement>('#site-banner')
   if (!host) return
-  host.innerHTML = finishedBanner
-  host.hidden = finishedBanner.trim().length === 0
+  const hero = await load('hero')
+  const html = hero.trim().length > 0 ? hero : await load('logo')
+  host.innerHTML = html
+  host.hidden = html.trim().length === 0
+}
+
+/** Raw text of a drawing slot, empty when the deployment ships none. */
+async function load(slot: 'hero' | 'logo'): Promise<string> {
+  const override = OVERRIDE.length > 0 ? `${slot}.${OVERRIDE}.html` : ''
+  const loader =
+    (override ? drawings[`../assets/branding/${override}`] : undefined) ??
+    drawings[`../assets/branding/${slot}.html`]
+  return loader ? await loader() : ''
+}
+
+/** The nodes of a markup fragment, without a wrapper element. */
+function fragment(html: string): Node[] {
+  const template = document.createElement('template')
+  template.innerHTML = html
+  return [...template.content.childNodes]
 }

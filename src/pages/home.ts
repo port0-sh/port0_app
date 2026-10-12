@@ -164,7 +164,7 @@ function renderTable(): void {
         el('th', { class: 'num' }, 'Reserves'),
         el('th', { class: 'num hide-sm' }, 'Volume 24h'),
         el('th', { class: 'num' }, 'Fee'),
-        el('th', { class: 'num' }, 'Yield'),
+        el('th', { class: 'num' }, 'Fee APR'),
         el('th', { class: 'open-col' }, ''),
       ),
     ),
@@ -230,17 +230,17 @@ function poolRow(pool: IndexerPool): HTMLTableRowElement {
       line(compactAmount(BigInt(pool.volume_24h_1), view.token1Decimals), view.token1Symbol),
     ),
     el('td', { class: 'num' }, el('span', { class: 'figure' }, formatBps(BigInt(pool.lp_fee_bps)))),
-    yieldCell(pool),
+    feeAprCell(pool),
     el('td', { class: 'open-col' }, el('span', { class: 'open', 'aria-hidden': 'true' }, '→')),
   )
 }
 
 /**
- * The fee yield the pool paid its liquidity providers, with the window it is
- * annualised over. A pool the indexer has watched for minutes has minutes of
+ * Fee APR: the fee yield the pool paid its liquidity providers, annualised over
+ * the window the indexer measured. A pool watched for minutes has minutes of
  * history, and the number is worth exactly that much.
  */
-function yieldCell(pool: IndexerPool): HTMLTableCellElement {
+function feeAprCell(pool: IndexerPool): HTMLTableCellElement {
   // `> 0` rather than `=== 0`: an indexer from before this field existed sends
   // nothing, and a missing window is not a measured zero.
   if (!(pool.fee_apr_window_secs > 0)) {

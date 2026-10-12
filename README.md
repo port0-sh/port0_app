@@ -12,7 +12,14 @@ TypeScript.
 | ------------------------ | -------------- | ------------------------------------------------------------- |
 | `/`                      | `index.html`   | Browse every registered pool from the indexer                 |
 | `/pool.html?id=<poolid>` | `pool.html`    | Pool state, swap, add liquidity, remove liquidity             |
-| `/create.html`           | `create.html`  | Deploy a pool and register it |
+| `/create.html`           | `create.html`  | Deploy a pool and register it                                 |
+| `/about.html`            | `about.html`   | What the pools are, and the risks of a testnet                |
+
+Every page carries the same chrome: the testnet notice as a strip above the
+header, dismissed once and remembered under the key that `<html data-notice-key>`
+names, the footer with the copyright year, and the chart attribution. The index
+adds the hero drawing, the brand heading under it, a link to the launch page, and
+the slogan.
 
 Pool ids are canonical account-id hex strings (`AccountId.toString()`), with
 or without a `0x` prefix.
@@ -206,19 +213,43 @@ Both build their form in a modal, so no page carries a utility it does not need.
 ## Branding
 
 MidenXYK is the library; a deployment is a platform with its own name, mark, and
-artwork. All of it comes from `.env`:
+artwork. The name is configuration, the drawings are files:
 
-| Variable | Effect |
+| Item | Effect |
 | --- | --- |
-| `VITE_BRAND_NAME` | Wordmark and the name in every page title |
-| `VITE_BRAND_LOGO_TEXT` | Single-line text mark, used when no image is given |
-| `VITE_BRAND_LOGO_IMAGE` | Logo image path or URL, takes precedence over the text |
+| `VITE_BRAND_NAME` | Wordmark, page titles, `og:site_name`, footer |
+| `VITE_BRAND_LOGO_TEXT` | Text mark beside the header logo; falls back to the name |
+| `VITE_BRAND_SLOGAN` | One line under the home page name; empty hides it |
+| `VITE_BRAND_OVERRIDE` | Override flavour, for example `local` |
+| `src/assets/branding/hero.html` | The home page hero |
+| `src/assets/branding/logo.html` | The mark in the header of the other pages |
 
-The banner is `src/assets/banners/finished.html`, injected as it stands. It is
-authored markup rather than generated: it holds the `<pre class="banner-source">`
-with the artwork and any `<span class="banner-swell">` runs that move, and
-`src/styles/global.css` holds the motion. Edit both files by hand; nothing in the
-application parses or reassembles the drawing.
+A deployment replaces a drawing by adding `<slot>.<flavour>.html` beside it and
+setting `VITE_BRAND_OVERRIDE` to that flavour: `VITE_BRAND_OVERRIDE=local` makes
+`hero.local.html` win over `hero.html`. Override paths match `*.local.html`, which
+`.gitignore` excludes. An empty hero falls back to the logo, and an empty file
+leaves the markup the page shipped with.
+
+Both drawings are injected as they stand. Nothing in the application parses or
+reassembles a drawing. A drawing may carry a `<style>` element, which is where
+its own motion belongs. `.banner-source` in `src/styles/global.css` holds the
+metrics a drawing needs to be legible at all, so no hero paints unstyled while
+its block is on the way; a drawing that wants other metrics declares them in its
+own block, which comes later and wins at equal specificity.
+
+The neutral defaults, the open-source face of the project, are the platform name
+`MidenXYK` and the slogan `An open AMM for Miden`:
+
+```sh
+npm run dev:neutral      # http://localhost:5180
+npm run build:neutral    # writes dist-neutral/, leaves dist/ alone
+npm run preview:neutral  # serves dist-neutral/ on http://localhost:4180
+```
+
+Those scripts run Vite in mode `neutral`, which loads `.env.neutral`, so the value
+there wins over the same key in `.env`, and the empty `VITE_BRAND_OVERRIDE` keeps
+a deployment's own drawings out of the picture. Every other key still comes from
+`.env`.
 
 Artwork is rendered in the bundled `aahub_light` font, which is what gives
 Japanese ASCII art the character widths its authors assumed; its licences
