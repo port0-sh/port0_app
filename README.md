@@ -347,7 +347,7 @@ The pinned version matrix:
 | `@miden-sdk/miden-wallet-adapter-miden`    | 0.17.0  |
 | `@miden-sdk/para`                          | 0.17.0  |
 | `@getpara/web-sdk`                         | 3.18.0  |
-| `miden-xyk-sdk`                            | `file:../miden_xyk_sdk_ts` (linked during SDK development) |
+| `miden-xyk-sdk`                            | `file:` link to a local SDK checkout during SDK development |
 
 ## Known limitations
 

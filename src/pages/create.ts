@@ -218,9 +218,7 @@ async function parseAccountRef(value: string, label: string): Promise<AccountId>
  *
  * The pool's fee configuration is frozen at creation and validated against this
  * by the pool registry, so a pool built with anything else is rejected at
- * registration. Reading it here keeps the page and the registry in step; a
- * per-tier protocol fee computed in the app silently disagreed with the
- * registry's single rate.
+ * registration. Reading the policy here keeps the page and the registry in step.
  */
 let registryPolicy: RegistryFeePolicy | null = null
 

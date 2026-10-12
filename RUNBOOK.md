@@ -15,18 +15,20 @@ Testnet version: 0.17.1. Every `@miden-sdk/*` and `miden-node-proto` pin matches
 
 ### 1. Contracts
 
-The SDK's artifact exporter builds the packages itself, so this step is only
-needed to build the contracts seed of a fresh checkout.
+In the `miden_xyk` checkout:
 
 ```sh
-cd miden_xyk
 cargo miden build --manifest-path contracts/miden-xyk/Cargo.toml --release
 ```
 
+The SDK's artifact exporter builds the packages itself, so this step is only
+needed to seed a fresh checkout.
+
 ### 2. SDK artifacts
 
+In the `miden_xyk_sdk_ts` checkout:
+
 ```sh
-cd miden_xyk_sdk_ts
 npm install
 npm run generate   # exports the compiled packages into src/generated
 npm run build
@@ -64,8 +66,9 @@ exits. Keys and store: `~/.miden/stores/<MIDEN_XYK_STORE>/`.
 
 ### 5. Indexer
 
+In the `miden_xyk_indexer` checkout:
+
 ```sh
-cd ../miden_xyk_indexer
 cp .env.example .env       # set MIDEN_XYC_REGISTRY_ID to the registry id from step 4
 cargo run --release
 ```
@@ -76,8 +79,9 @@ registry poll (default 60 s) and the pool poll (default 15 s).
 
 ### 6. App
 
+In the `miden_xyk_app` checkout:
+
 ```sh
-cd ../miden_xyk_app
 cp .env.example .env       # set VITE_REGISTRY_ID and VITE_INDEXER_URL=http://localhost:8080
 npm run dev
 ```
