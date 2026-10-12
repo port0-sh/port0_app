@@ -1,18 +1,18 @@
 /**
  * Lazy access to the Miden SDK stack.
  *
- * The stack (@miden-sdk/miden-sdk + miden-xyk-sdk) ships megabytes of WASM.
+ * The stack (@miden-sdk/miden-sdk + port0-sdk) ships megabytes of WASM.
  * Pages import this module freely; the heavy payload is fetched and
  * initialized only on first use. Keep this module free of eager imports.
  */
 
 import type { Account, AccountId, MidenClient } from '@miden-sdk/miden-sdk'
-import type { XykClient } from 'miden-xyk-sdk'
+import type { XykClient } from 'port0-sdk'
 import { CONFIG } from './config'
 import { isHexId, withHexPrefix } from './format'
 
 let sdkModulePromise: Promise<typeof import('@miden-sdk/miden-sdk')> | null = null
-let xykModulePromise: Promise<typeof import('miden-xyk-sdk')> | null = null
+let xykModulePromise: Promise<typeof import('port0-sdk')> | null = null
 let midenClient: Promise<MidenClient> | null = null
 let xykClient: Promise<XykClient> | null = null
 
@@ -22,14 +22,14 @@ export function sdkModule(): Promise<typeof import('@miden-sdk/miden-sdk')> {
   return sdkModulePromise
 }
 
-/** Cached module loader for the XYK SDK. */
-export function xykModule(): Promise<typeof import('miden-xyk-sdk')> {
-  xykModulePromise ??= import('miden-xyk-sdk')
+/** Cached module loader for the port0 SDK. */
+export function xykModule(): Promise<typeof import('port0-sdk')> {
+  xykModulePromise ??= import('port0-sdk')
   return xykModulePromise
 }
 
 /** The resolved XYK SDK module namespace. */
-export type XykModule = typeof import('miden-xyk-sdk')
+export type XykModule = typeof import('port0-sdk')
 
 /** Returns the shared MidenClient, creating it on first call. */
 export async function getClient(): Promise<MidenClient> {

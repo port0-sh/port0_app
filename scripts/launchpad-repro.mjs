@@ -54,7 +54,7 @@ const client = await MidenClient.create({
   feeFaucetId: FEE_FAUCET,
   autoSync: false,
   proverUrl: 'testnet',
-  storeName: 'miden-xyk-launchpad-test',
+  storeName: 'port0-launchpad-test',
 })
 
 // Step A: the funded test account (same seed every run).

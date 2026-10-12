@@ -1,10 +1,6 @@
 node_modules/
 dist/
-dist-neutral/
 .env
 .env.local
 *.log
 *.tsbuildinfo
-
-# Operator branding overrides: a file at this path wins over the tracked default.
-src/assets/branding/*.local.html

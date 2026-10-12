@@ -1,4 +1,4 @@
-/* Miden XYK stylesheet.
+/* port0.sh stylesheet.
    Palette borrowed from mic0.dev (PICO-8 primitives on black).
    One hand-written stylesheet; no framework, no utility classes beyond what
    the markup actually repeats. */
@@ -213,13 +213,6 @@ a:active {
 
 .brand-name {
   letter-spacing: 0.1em;
-}
-
-/* XYK as a superscript in the wordmark. */
-.brand-name .accent {
-  vertical-align: super;
-  font-size: 0.7em;
-  letter-spacing: normal;
 }
 
 .nav {
@@ -828,10 +821,6 @@ html[data-notice='dismissed'] #testnet-notice {
   font-size: 0.75em;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-}
-
-.accent {
-  color: var(--green);
 }
 
 .open-col {

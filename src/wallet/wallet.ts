@@ -55,7 +55,7 @@ export const walletStore = createStore<WalletState>({
  * wallet handshake re-driven; the wallet itself then answers from its own
  * stored dApp session without prompting (unless it locked meanwhile).
  */
-const SESSION_KEY = 'miden-xyk-app:wallet-session:v1'
+const SESSION_KEY = 'port0-app:wallet-session:v1'
 
 interface SavedSession {
   kind: 'bread'
@@ -104,7 +104,7 @@ let adapterPromise: Promise<MidenWalletAdapter> | null = null
  * `syncWallet` can drive the wallet to the current tip through
  * `waitForTransaction`, the call that made the pool-creation configure align.
  */
-const LAST_TX_KEY = 'miden-xyk-app:last-wallet-tx:v1'
+const LAST_TX_KEY = 'port0-app:last-wallet-tx:v1'
 
 function rememberWalletTx(txId: string): void {
   try {

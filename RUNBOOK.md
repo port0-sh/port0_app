@@ -4,10 +4,10 @@ How to stand up the stack and deploy a pool. Four repositories:
 
 | Repository | Role |
 | --- | --- |
-| `miden_xyk` | Contracts: the pool component, the registry component, and the note scripts |
-| `miden_xyk_sdk_ts` | TypeScript SDK: contract artifacts, the registry account builder, and the pool operations |
-| `miden_xyk_indexer` | Rust indexer: reads the registry and pools over node RPC, serves HTTP |
-| `miden_xyk_app` | Static web app: browse pools, trade, provide liquidity, create pools |
+| `port0` | Contracts: the pool component, the registry component, and the note scripts |
+| `port0_sdk` | TypeScript SDK: contract artifacts, the registry account builder, and the pool operations |
+| `port0_indexer` | Rust indexer: reads the registry and pools over node RPC, serves HTTP |
+| `port0_app` | Static web app: browse pools, trade, provide liquidity, create pools |
 
 Testnet version: 0.17.1. Every `@miden-sdk/*` and `miden-node-proto` pin matches it.
 
@@ -15,10 +15,10 @@ Testnet version: 0.17.1. Every `@miden-sdk/*` and `miden-node-proto` pin matches
 
 ### 1. Contracts
 
-In the `miden_xyk` checkout:
+In the `port0` checkout:
 
 ```sh
-cargo miden build --manifest-path contracts/miden-xyk/Cargo.toml --release
+cargo miden build --manifest-path contracts/port0/Cargo.toml --release
 ```
 
 The SDK's artifact exporter builds the packages itself, so this step is only
@@ -26,7 +26,7 @@ needed to seed a fresh checkout.
 
 ### 2. SDK artifacts
 
-In the `miden_xyk_sdk_ts` checkout:
+In the `port0_sdk` checkout:
 
 ```sh
 npm install
@@ -41,8 +41,8 @@ npm run pool:commitment
 ```
 
 Prints the accepted pool code commitment, currently
-`0x9c702bd2ec00883a8f24228e022e9045523e809ae32e9226187463be8f59f202`. The value
-covers the pool's full component set: the `miden-xyk` component,
+`0x51c52cca051456d35329f2add92319f6447f1437a8b716279e536c1c0f6fab09`. The value
+covers the pool's full component set: the `port0` component,
 `CodeInspection`, the network-account auth, and the fee-policy components. It
 changes whenever any of those change, and the registry must be seeded with the
 value the deployed pool produces.
@@ -50,26 +50,26 @@ value the deployed pool produces.
 ### 4. Registry account
 
 ```sh
-cp .env.example .env       # set MIDEN_XYK_FEE_FAUCET_ID and MIDEN_XYK_POOL_COMMITMENT
+cp .env.example .env       # set PORT0_FEE_FAUCET_ID and PORT0_POOL_COMMITMENT
 npm run registry:deploy
 ```
 
 The tool is interactive. On first run it creates an operator wallet, prints
 its bech32 address, and polls until the fee asset arrives. It consumes the
 incoming note, then funds the registry with whatever the operator holds above
-the transaction fee, capped at `MIDEN_XYK_FUND`. Send at least 134 base units
+the transaction fee, capped at `PORT0_FUND`. Send at least 134 base units
 to proceed; `1000 + 133` funds the registry at the default. The tool then
 builds the registry with `createRegistryAccount`, funds it, and deploys it,
 printing the registry id. No re-run is needed. Wait timeout:
-`MIDEN_XYK_WAIT_SECS` (default 600); on timeout it prints the address and
-exits. Keys and store: `~/.miden/stores/<MIDEN_XYK_STORE>/`.
+`PORT0_WAIT_SECS` (default 600); on timeout it prints the address and
+exits. Keys and store: `~/.miden/stores/<PORT0_STORE>/`.
 
 ### 5. Indexer
 
-In the `miden_xyk_indexer` checkout:
+In the `port0_indexer` checkout:
 
 ```sh
-cp .env.example .env       # set MIDEN_XYC_REGISTRY_ID to the registry id from step 4
+cp .env.example .env       # set PORT0_REGISTRY_ID to the registry id from step 4
 cargo run --release
 ```
 
@@ -79,7 +79,7 @@ registry poll (default 60 s) and the pool poll (default 15 s).
 
 ### 6. App
 
-In the `miden_xyk_app` checkout:
+In the `port0_app` checkout:
 
 ```sh
 cp .env.example .env       # set VITE_REGISTRY_ID and VITE_INDEXER_URL=http://localhost:8080
@@ -128,7 +128,7 @@ the client directly when the account's key is in the client keystore.
 
 ```ts
 import { MidenClient } from "@miden-sdk/miden-sdk";
-import { XykClient } from "miden-xyk-sdk";
+import { XykClient } from "port0-sdk";
 
 const client = await MidenClient.create({
   rpcUrl,
@@ -193,12 +193,12 @@ Reserves equal the vault balances of token0 and token1 minus the protocol pot.
 
 | Symptom | Cause and fix |
 | --- | --- |
-| `MIDEN_XYC_REGISTRY_ID is required` | The indexer has no registry id. Set it in `.env`. |
+| `PORT0_REGISTRY_ID is required` | The indexer has no registry id. Set it in `.env`. |
 | `registry response is missing slot pool_registry::pool_registry::pools` | The indexer points at an account that is not the registry. Correct the id. |
 | Pool absent from the home page | The indexer is not running, the registry id is wrong, or the register note has not been consumed by the node's builder yet. Check `GET /status`. |
 | `Pool code commitment not accepted` at registration | The registry was seeded with a stale commitment. Re-run `npm run pool:commitment` and redeploy the registry, or register a pool built with the accepted component set. |
 | Trading disabled on the pool page | The indexer could not read the pool's fee asset id or fee schedule. Check the pool's network-account slots. |
-| `funding not received within Ns (balance X/Y)` | The operator address was not funded within the wait. Send it fee asset base units and re-run, or raise `MIDEN_XYK_WAIT_SECS`. |
+| `funding not received within Ns (balance X/Y)` | The operator address was not funded within the wait. Send it fee asset base units and re-run, or raise `PORT0_WAIT_SECS`. |
 | `SummaryAnchorMismatchError` at register | The wallet captured its chain anchor at a block other than the request's bound block; a block landed between the two syncs. The page syncs the wallet immediately before the build to narrow the window. Press **Retry <stage>** to rebuild the request at a fresh tip. |
 | `ERR_NETWORK_ACCOUNT_TRANSACTION_HAS_NO_EFFECT` | A network-account deploy with no effect. Deploy by consuming a funding note, as the tools do. |
 | `procedure with root digest ... could not be found` | The client minor is behind the node. Bump every `@miden-sdk/*` and `miden-node-proto` pin to the node's version. |

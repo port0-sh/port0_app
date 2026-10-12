@@ -5,7 +5,7 @@
  * with maxSupply equal to the initial supply and the whole supply is minted
  * to the creator's wallet in the same transaction flow. Nobody can mint more.
  *
- * The supply bound is the XYK contract's MAX_AMOUNT (2^57): every pool
+ * The supply bound is the port0 contract's MAX_AMOUNT (2^57): every pool
  * amount must stay below it (u64 amounts with u128 intermediates and 10_000
  * bps headroom). The caller passes the SDK's MAX_AMOUNT; the default below
  * mirrors it so the pure module stays testable without the SDK.

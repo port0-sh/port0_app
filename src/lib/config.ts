@@ -19,16 +19,15 @@ const DEFAULT_CHAIN_FEE_FAUCET_ID = '0x4cbdcaffe75f0a317482224dae6436'
 const DEV_RPC_PROXY_PATH = '/rpc.Api'
 
 export const CONFIG = {
-  appName: 'Miden XYK',
+  appName: 'port0.sh',
 
   /**
-   * Branding. MidenXYK is the library; a deployment is a platform with its own
-   * name, mark, and artwork, so all of it comes from env vars rather than being
-   * written into the pages.
+   * Branding. The name, the text mark, and the slogan come from env vars rather
+   * than being written into the pages; the two drawings are files.
    */
   brand: {
     /** Wordmark and page-title name. */
-    name: import.meta.env.VITE_BRAND_NAME?.trim() || 'MidenXYK',
+    name: import.meta.env.VITE_BRAND_NAME?.trim() || 'port0.sh',
     /** Single-line text mark beside the header logo. */
     logoText: import.meta.env.VITE_BRAND_LOGO_TEXT?.trim() ?? '',
     /** One line under the name on the home page; hidden when empty. */

@@ -24,7 +24,7 @@
  * without it.
  */
 
-import type { PoolNoteKind, PoolNoteFees } from 'miden-xyk-sdk'
+import type { PoolNoteKind, PoolNoteFees } from 'port0-sdk'
 import type { AccountId } from '@miden-sdk/miden-sdk'
 import {
   getClient,
@@ -36,7 +36,7 @@ import {
 import { CONFIG } from '../lib/config'
 import { qs, setText } from '../lib/dom'
 import { DEFAULT_LP_FEE_BPS } from '../lib/fees'
-import type { RegistryFeePolicy } from 'miden-xyk-sdk'
+import type { RegistryFeePolicy } from 'port0-sdk'
 import { formatBps, isHexId, shortHex, withHexPrefix } from '../lib/format'
 
 import { mountSiteChrome } from '../lib/site'
@@ -452,7 +452,7 @@ async function run(): Promise<void> {
 
 /* Register step and create-page draft. */
 
-const DRAFT_KEY = 'miden-xyk-app:create-draft:v1'
+const DRAFT_KEY = 'port0-app:create-draft:v1'
 
 interface CreateDraft {
   token0?: string

@@ -13,7 +13,7 @@ import { resolve } from 'node:path'
 export default defineConfig({
   envPrefix: ['VITE_'],
   resolve: {
-    // The miden vite plugin dedupes the WASM SDK so the app and miden-xyk-sdk
+    // The miden vite plugin dedupes the WASM SDK so the app and port0-sdk
     // share one instance; replicate that with Vite 8 (the plugin peers on
     // Vite 5/6). Without it, objects from one copy fail instanceof checks in
     // the other ("expected instance of X").
@@ -31,7 +31,7 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: ['@miden-sdk/miden-sdk', 'miden-xyk-sdk'],
+    exclude: ['@miden-sdk/miden-sdk', 'port0-sdk'],
   },
   server: {
     proxy: {

@@ -9,7 +9,7 @@
  * integer range of JSON numbers.
  */
 
-import type { PoolNoteKind } from 'miden-xyk-sdk'
+import type { PoolNoteKind } from 'port0-sdk'
 import { normalizeHex, shortHex } from './format'
 
 export interface FeeScheduleEntry {
@@ -189,7 +189,7 @@ export async function toPoolView(
 ): Promise<PoolView> {
   const noteFees: Partial<Record<PoolNoteKind, string>> = {}
   if (includeNoteFees) {
-    const { noteScript, POOL_NOTE_KINDS } = await import('miden-xyk-sdk')
+    const { noteScript, POOL_NOTE_KINDS } = await import('port0-sdk')
     const schedule = new Map(
       pool.fee_schedule.map((entry) => [entry.root.toLowerCase(), entry.amount]),
     )

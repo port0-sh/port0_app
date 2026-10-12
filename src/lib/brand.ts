@@ -1,21 +1,14 @@
 /**
  * Branding.
  *
- * MidenXYK is the library; a deployment is a platform with its own name, mark,
- * and artwork. The name, the text mark, and the slogan come from configuration.
- * The two drawings come from files meant to be edited by hand:
+ * The brand name, the text mark, and the slogan come from configuration. The two
+ * drawings are files meant to be edited by hand:
  *
  *   src/assets/branding/hero.html   the home page hero
  *   src/assets/branding/logo.html   the mark in the header of the other pages
  *
- * A deployment overrides either one by adding a second file beside it, named
- * `<slot>.<override>.html`, and setting `VITE_BRAND_OVERRIDE` to that override.
- * With `VITE_BRAND_OVERRIDE=local`, `hero.local.html` wins over `hero.html`.
- * Override names match `*.local.html`, which `.gitignore` excludes.
- *
- * Both files are inserted as they stand: nothing here parses, splits, or
- * reassembles a drawing, and a drawing carries its own `<style>` when it needs
- * motion of its own.
+ * Both are inserted as they stand: nothing here parses, splits, or reassembles a
+ * drawing, and a drawing carries its own `<style>` when it needs motion.
  */
 
 import { CONFIG } from './config'
@@ -25,9 +18,6 @@ const drawings = import.meta.glob('../assets/branding/*.html', {
   query: '?raw',
   import: 'default',
 }) as Record<string, () => Promise<string>>
-
-/** Override flavour selected by `VITE_BRAND_OVERRIDE`; empty uses the shipped file. */
-const OVERRIDE = (import.meta.env.VITE_BRAND_OVERRIDE ?? '').trim()
 
 /** Renders the brand slots a page provides: the hero, the mark, the heading. */
 export function mountBrand(): void {
@@ -76,12 +66,9 @@ async function renderHero(): Promise<void> {
   host.hidden = html.trim().length === 0
 }
 
-/** Raw text of a drawing slot, empty when the deployment ships none. */
+/** Raw text of a drawing slot, empty when none ships. */
 async function load(slot: 'hero' | 'logo'): Promise<string> {
-  const override = OVERRIDE.length > 0 ? `${slot}.${OVERRIDE}.html` : ''
-  const loader =
-    (override ? drawings[`../assets/branding/${override}`] : undefined) ??
-    drawings[`../assets/branding/${slot}.html`]
+  const loader = drawings[`../assets/branding/${slot}.html`]
   return loader ? await loader() : ''
 }
 

@@ -1,23 +1,62 @@
-<pre class="banner-source">
-　　　　　　　　　　　　　　　　　　　　　　　 ,,-‐‐‐ - ､
-　　　　　　　　　　　　　　　　　　　　　　／　　　　　　｀ ヽ､
-　　,,= ､　　　　　　　　　　　　　　　　 ,'/　　　　　　　　　　 ヽ､
-　〈　ヽ.｀ヽ、　　　　　　　　　　　　　 ｊ ｊ　　　　　　　　　　　　 ﾞヽ
-　 ヾｲヽ　　ヽ、　　　　　　　 　 　 　 ', ',　　　　　　　　　　　　　 ヽ
-　　 ヾ"ゝ､　　ヽ　 　 　 　 　 　 　 　 ',∧　　　　　　　　　　　　　 ',　　　　 __ ゝ＜辷辷-､
-　　　 ＼-'ゝ、　 ＼　　　　　　　 　 　 ∨ヾ　　　　　　　　　　　　 ｊ　 ,,＜ ,,＞-'''' ￣　 ￣｀ヽ､
-　　　　　ゝ､ ゝ､　　＼　　　　　　 　 　 .＼,,＼　　　　　　　　　　,ﾉ＜､-''´　　　　　　　　　　　ﾞヽ
-　　　　　　 ヽ／ゝ､　.ヽ　 　 　　　　　　　ゝヽ､｀ヽ､__　　　　　イ､ ／　 　　　　　　　　　　　　　 ヽ
-　　　　　　　 　＼ｲ,,ゝ,ｨ　　　　　　　　　　 　 ﾞヽヽ_∠フ辷-イ､／　 　　　　　　　　　　　　　　　　',
-　　　　　　　　　　 ｀-"　　　　　　 　 　 　 　 　 　 　 　 　 /　//　　　　　　　　　　　　　　　　　　　i
-　　　　　　　　　　　　　　　　　　　 　 　 　 　 　 　 　 　 / ゝ'/　　　　　　　　　　　　　　　　　　　　i
-　　　　　　　　　　　　　　　　　　　　　　　　　　　　　 　 /ヽ/　　　　　　　　　　　　　　　　　　　　 ,!
-　　　　　　　　　　　　　　　　　　　　　　　　　　　 　 　 ﾄ､//　　　　　　　　　　　　　　　　　　　　.,'
-　　　　　　　　　　　　　　　　　 　 　 　 　 　 　 　 　 　 i　i　　　　　　　　　　　　　　　　 　 　 　 ,'
-　　　　　　　　　　　　　　　　　　　　　　　　　　　　 　　ｉ｀ｊ　　　　　　　　　　　 　 　 　 　 　 　 /
-　　　　　　　　　　　　　　　　　　　　　　　　　　 　 　 　 ',,ｊ　　　　　　　　　　　　　　　　　　　,/
-　　　　　　　　　　　　　　　　　　　 　 　 　 　 　 　 　 　 ヾ、　　　　　　　　　　　　　　　　／
-　　　　　　　　　　　　　　　　　　　　　　　　　　　　　 　　　ヽ　　　　　　　　　　　　　 ,,-"
-　　　　　　　　　　　　　　　　　　　　　　　　　　　　　 　 　 　 ＼､　　　　　　　 ,,,-‐'"
-　　　　　　　　　　　　　　　　　　　　　　　　 　 　 　 　 　 　 　 　 ｀'''''‐---‐'''"
+<style>
+  /*
+   * This drawing's own move, kept with the drawing so a deployment that swaps the
+   * hero swaps how it moves. The leading characters of a sea row are inline-block
+   * because a transform does not apply to a non-replaced inline box; the font and
+   * line height are inherited, so they sit on the same baseline as the text around
+   * them. Each row runs on its own delay and period, so the rows drift out of step
+   * and read as water. The rest of the row does not move: it carries the boat's
+   * reflection and the far edge of the drawing.
+   */
+  .banner-swell {
+    display: inline-block;
+    animation-name: sea-swell;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-direction: alternate;
+  }
+
+  @keyframes sea-swell {
+    from {
+      transform: translateX(-2ch) translateY(-0.1ch);
+    }
+
+    to {
+      transform: translateX(0ch) translateY(0ch);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .banner-swell {
+      animation: none;
+    }
+  }
+</style>
+
+<pre class="banner-source">　　　　　　　　　　　　　　　　　　　　　　　_＿＿＿＿_
+　　　　　　　　　　　　　　　　　　 　 　 ＿| | port0.sh |
+　　　　　　　　　　　　　　　　　　 　 　 ￣| |￣￣￣￣　　　　　　　　　　　　　　　　　　　　　　　　　　 　x父父ｘ
+　　　　　　　　　　　　　　　　　　 　 　 　 | |　 ∩　　　　　　　　　　　　　　　　　　　　　　　　　　　　　　爻爻爻
+　　　　　　　　　　　　　　　　　　　　 ＿__| |＿,|_|__　　　　　　　　　　　　　　　　　　　　　　　　　　　　　⌒VV⌒
+　　　　　　　　　　 　 　 　 　 　 　 　 ¨¨¨| |¨ﾞ丁|ﾟ~ｎ　　　　　　　　　　　　　　　　　　　　　　　xXXx, 　 　 } :{
+　　　　　　　　　　　　　　　　　　　＿＿__| |＿,|_|_,,|:|__　　　　　　　　　　　　　　　　　　　　　 爻爻爻　 　 } :{
+　　　　　　　　　　 　 　 　 　 　 　 ¨¨¨¨¨| |¨ﾞ丁|¨Π¨　　　　　　　　 　 　 　 　 　 　 　 　 　 ⌒VV⌒　　 } :{
+　　　　　　　　　　　　 　 　 　 　 　 ┌ｰ‐| |─:| |‐:|:|‐━=/ﾞ|￣｀'ｉ=＝＝＝＝===━ー─‐-- 　 }::[　　　　} :{　　 ＿＿＿＿＿
+　　　　　　　　　　　　　　　 　 ＿＿_|＿_,| |＿,|_|_,,|:|＿　 | :|　　 |　　　　　　　　　 　 　 　 　 |　 }::[　　　　} :{　　.|＼　　　 _,ﾆ-
+　　　　　　　　　　　　　　 　 　 ¨¨¨¨|¨¨¨| |¨ﾞ丁|¨Π¨¨　:| :|　　 |　|￣￣￣|_,|三|　x父父ｘ　|　 }::[　　　　} :{　 _｣　 ｀`''"´,､,､,vivi
+　　　　　　 　 　 　 　 　 　 　 　 　 |¨¨¨¨| |¨¨:| |¨:|:|¨¨¨¨|/｀丶､|丁￣￣￣　|三|　'⌒}:[⌒　|　 }::{　　 _,.､} :{ ' ´　┌;';';';';';';';';';';';';'
+　 　 　 　 丕丕　　　　　　 　 　 　 |　 　 | |　 :| |_,,|:|"´￣|￣￣¨¨¨ " ｉ ＿__,,,|..､ --‐‐}:{…￢冖}::{' "´ 　 } :{　　　 |xX爻爻爻爻
+　　　　　 　 ||　　　　　　　　　|￣￣￣￣| |￣:| |　|:|-‐…|￢ … ─--|:|＿＿xXXx＿_}:{＿＿＿}::{.___＿　} :{　 xX爻淡淡淡淡淡
+　 ｉ¨¨¨¨¨¨¨||¨¨¨¨¨¨¨¨¨¨¨¨|二二二二.| |二:| |¨:|:|.:.:.:.:. | ::::::::::::::::: |￣|＿_____,}:{＿＿}:{匚匚匚}::{匚匚]=} :{xX爻淡淡淡淡淡淡
+ｰ┴ー──:||─────‐〈＼.|¨¨¨¨¨¨| |¨¨:| |¨:|:|.:.:.:.:. | ::::::::::::::::: |_|｢「「「「「「}:{vviVi}:{从从从}::{从v_从} :{爻淡淡淡淡淡㌻¨
+￣|￣|￣|￣||￣|￣xｉ爻爻爻|＼＼　 |￣| |￣:| |,_,|:|.:.:.:.:. | :::::::::::::::::::: |x爻爻爻}:{爻爻}:{爻爻爻}::{乂,|￣;;} :{爻淡淡淡淡㌻
+ＴＴＴＴＴＴＴＴＴＴＴＴＴＴＴＴＴＴＴＴ|∨￣ﾆ=-　 _|_|＿|￣|ﾆT冖冖￢ー┼ＹＹＹＹY}:{爻淡}:{厂厂√}::{＞'|　　} :{‐‐┴┐￣￣＞''´
+────────────‐|.:.:.　　　　　　　　　￣￣|───‐ 「|￣￣￣´""''ｰ=:}:{＿i＞ ´};;{＿,|_,,ノ}_,{ﾆ=- ┴＞''´＿＿
+<span class="banner-swell" style="animation-delay: -0.5s; animation-duration: 2.7s;">　　　　　　　　　_　　　　　　　_</span>　 ﾟ｡.:.:.　　　　　　　　　　 .ﾉ<span class="banner-swell" style="animation-delay: -0.5s; animation-duration: 2.7s;">　　‐‐ﾆﾆ</span>|¨|　　　　　　　　　　　　 ´"''ｰ=ﾆ,,__.:.:.:.:.:.:.:＞''´ｒ─┤＿＿
+<span class="banner-swell" style="animation-delay: -0.9s; animation-duration: 2.7s;">　　　　‐ ‐‐　　　　　　　　　 ‐　　</span> ＼j＿,,..　　-‐…　 "´　　　　<span class="banner-swell" style="animation-delay: -0.5s; animation-duration: 2.7s;">ﾆ</span>｣￣ |　　　　　　　　　　　　　　　　 　 ￣´´"" '' ｰ|＿_,|
+<span class="banner-swell" style="animation-delay: -2s; animation-duration: 2.7s;">‐　　　 　 　 　 　 　 　 　 　 ‐　　ﾆﾆ　　　　　　　‐　　‐………ﾆ</span>| ¨二|　　　　　　　　　　　　　　　　　　　　　　　　　　￣¨¨'冖
+<span class="banner-swell" style="animation-delay: -0.45s; animation-duration: 2.7s;">　　　　─=‐　　　　　　‐　　─…ﾆﾆ─ ‐　　　　　　 ‐‐……ﾆニ</span>| ./ /|. . . .
+<span class="banner-swell" style="animation-delay: -0.9s; animation-duration: 2.7s;">　‐=─　　　‐‐‐　　　　　 　 ‐‐…Ξ‐‐　　　 　 ‐　─=二ΞΞΞ</span>/ / :|　: : : : : : : : . . . . . . . . .
+<span class="banner-swell" style="animation-delay: -1.35s; animation-duration: 2.7s;">　　　　　　　‐　　　　　　‐ ‐ 二ΞΞ二　 　 -　 　 - - -二ΞΞ</span>|￣|　|: : : : : : : : : : : : : : :: : : : : : : :: : : : : : . . . . . ..
+<span class="banner-swell" style="animation-delay: -0.9s; animation-duration: 2.7s;">　　　‐　‐　　　　　　　　‐‐　二ΞΞ二　　　- -　　　- -二Ξ</span>//|　 |　|　　　　　　　　　　　　　　. . . . . . . : : : : : : : : : : . . . . .
 </pre>

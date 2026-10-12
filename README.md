@@ -1,6 +1,6 @@
-# Miden XYK App
+# port0.sh app
 
-Static web application for the MidenXYK constant-product AMM on Miden. Users
+Static web application for the port0.sh constant-product AMM on Miden. Users
 browse pools, swap, deposit and withdraw liquidity, and create pools. There is
 no application framework and no client-side router: each page is a real HTML
 document with its own metadata, its own module entry, and a minimal amount of
@@ -50,7 +50,7 @@ failure conditions.
 In short, from a fresh checkout: build the contracts, build the SDK and run
 `npm run pool:commitment`, run `npm run registry:deploy` (fund the operator
 address it prints, then run again), start the indexer with
-`MIDEN_XYC_REGISTRY_ID` set, then start the app with `VITE_REGISTRY_ID` and
+`PORT0_REGISTRY_ID` set, then start the app with `VITE_REGISTRY_ID` and
 `VITE_INDEXER_URL` set. The browser fetches the indexer cross-origin in
 development; the indexer serves the API with permissive CORS.
 
@@ -227,23 +227,15 @@ Both build their form in a modal, so no page carries a utility it does not need.
 
 ## Branding
 
-MidenXYK is the library; a deployment is a platform with its own name, mark, and
-artwork. The name is configuration, the drawings are files:
+The name and slogan are configuration; the two drawings are files:
 
 | Item | Effect |
 | --- | --- |
 | `VITE_BRAND_NAME` | Wordmark, page titles, `og:site_name`, footer |
 | `VITE_BRAND_LOGO_TEXT` | Text mark beside the header logo; falls back to the name |
 | `VITE_BRAND_SLOGAN` | One line under the home page name; empty hides it |
-| `VITE_BRAND_OVERRIDE` | Override flavour, for example `local` |
 | `src/assets/branding/hero.html` | The home page hero |
 | `src/assets/branding/logo.html` | The mark in the header of the other pages |
-
-A deployment replaces a drawing by adding `<slot>.<flavour>.html` beside it and
-setting `VITE_BRAND_OVERRIDE` to that flavour: `VITE_BRAND_OVERRIDE=local` makes
-`hero.local.html` win over `hero.html`. Override paths match `*.local.html`, which
-`.gitignore` excludes. An empty hero falls back to the logo, and an empty file
-leaves the markup the page shipped with.
 
 Both drawings are injected as they stand. Nothing in the application parses or
 reassembles a drawing. A drawing may carry a `<style>` element, which is where
@@ -252,19 +244,9 @@ metrics a drawing needs to be legible at all, so no hero paints unstyled while
 its block is on the way; a drawing that wants other metrics declares them in its
 own block, which comes later and wins at equal specificity.
 
-The neutral defaults, the open-source face of the project, are the platform name
-`MidenXYK` and the slogan `An open AMM for Miden`:
-
-```sh
-npm run dev:neutral      # http://localhost:5180
-npm run build:neutral    # writes dist-neutral/, leaves dist/ alone
-npm run preview:neutral  # serves dist-neutral/ on http://localhost:4180
-```
-
-Those scripts run Vite in mode `neutral`, which loads `.env.neutral`, so the value
-there wins over the same key in `.env`, and the empty `VITE_BRAND_OVERRIDE` keeps
-a deployment's own drawings out of the picture. Every other key still comes from
-`.env`.
+An empty hero falls back to the logo, and an empty file leaves the markup the page
+shipped with. The defaults in `.env.example` are the brand's own: `port0.sh`, the
+text mark `port0`, and the slogan `The free port of Miden`.
 
 Artwork is rendered in the bundled `aahub_light` font, which is what gives
 Japanese ASCII art the character widths its authors assumed; its licences
@@ -347,7 +329,7 @@ The pinned version matrix:
 | `@miden-sdk/miden-wallet-adapter-miden`    | 0.17.0  |
 | `@miden-sdk/para`                          | 0.17.0  |
 | `@getpara/web-sdk`                         | 3.18.0  |
-| `miden-xyk-sdk`                            | `file:` link to a local SDK checkout during SDK development |
+| `port0-sdk`                            | `file:` link to a local SDK checkout during SDK development |
 
 ## Known limitations
 

@@ -9,7 +9,7 @@
  * signs, submits and confirms.
  */
 
-import type { Pool, PoolConfig, PoolState } from 'miden-xyk-sdk'
+import type { Pool, PoolConfig, PoolState } from 'port0-sdk'
 import type { AccountId } from '@miden-sdk/miden-sdk'
 import {
   getClient,
@@ -487,7 +487,7 @@ function priceToken0InToken1(state: PoolState): string | null {
   return trimFraction(formatAmount(raw.amountOut, record.token1Decimals))
 }
 
-/** The XYK module, if already loaded. Null when quotes have never run. */
+/** The port0 module, if already loaded. Null when quotes have never run. */
 let loadedXykModule: XykModule | null = null
 
 function currentQuoteModule(): XykModule | null {
