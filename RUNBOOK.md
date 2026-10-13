@@ -128,7 +128,7 @@ the client directly when the account's key is in the client keystore.
 
 ```ts
 import { MidenClient } from "@miden-sdk/miden-sdk";
-import { XykClient } from "port0-sdk";
+import { XykClient } from "@port0.sh/sdk";
 
 const client = await MidenClient.create({
   rpcUrl,

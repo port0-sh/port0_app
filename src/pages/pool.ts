@@ -9,7 +9,7 @@
  * signs, submits and confirms.
  */
 
-import type { Pool, PoolConfig, PoolState } from 'port0-sdk'
+import type { Pool, PoolConfig, PoolState } from '@port0.sh/sdk'
 import type { AccountId } from '@miden-sdk/miden-sdk'
 import {
   getClient,

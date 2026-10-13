@@ -24,7 +24,7 @@
  * without it.
  */
 
-import type { PoolNoteKind, PoolNoteFees } from 'port0-sdk'
+import type { PoolNoteKind, PoolNoteFees } from '@port0.sh/sdk'
 import type { AccountId } from '@miden-sdk/miden-sdk'
 import {
   getClient,
@@ -36,7 +36,7 @@ import {
 import { CONFIG } from '../lib/config'
 import { qs, setText } from '../lib/dom'
 import { DEFAULT_LP_FEE_BPS } from '../lib/fees'
-import type { RegistryFeePolicy } from 'port0-sdk'
+import type { RegistryFeePolicy } from '@port0.sh/sdk'
 import { formatBps, isHexId, shortHex, withHexPrefix } from '../lib/format'
 
 import { mountSiteChrome } from '../lib/site'

@@ -20,7 +20,7 @@
     "@miden-sdk/miden-wallet-adapter-miden": "^0.17.0",
     "@miden-sdk/para": "^0.17.0",
     "lightweight-charts": "^5.2.1",
-    "port0-sdk": "file:../port0_sdk"
+    "@port0.sh/sdk": "file:../port0_sdk"
   },
   "devDependencies": {
     "@types/node": "^24.13.2",
