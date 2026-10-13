@@ -317,20 +317,13 @@ afterwards.
 
 Bread Wallet is wired through `@miden-sdk/miden-wallet-adapter-miden`; the
 wallet picker shows its detection state and opens the install page when the
-extension is missing. Para Wallet's 0.17 packages are installed but the login
+extension is missing. Para Wallet's packages are installed but the login
 flow is gated behind `VITE_PARA_API_KEY`: without a configured key the picker
 explains the dependency instead of failing later.
 
-The pinned version matrix:
-
-| Package                                    | Version |
-| ------------------------------------------ | ------- |
-| `@miden-sdk/miden-sdk`                     | 0.17.1  |
-| `@miden-sdk/miden-wallet-adapter-base`     | 0.17.0  |
-| `@miden-sdk/miden-wallet-adapter-miden`    | 0.17.0  |
-| `@miden-sdk/para`                          | 0.17.0  |
-| `@getpara/web-sdk`                         | 3.18.0  |
-| `@port0.sh/sdk`                            | 0.1.0, pinned exactly to the published package |
+The package versions are pinned in `package.json` and `package-lock.json`. Keep
+the `@miden-sdk/*` packages and `@port0.sh/sdk` on the versions the testnet
+runs.
 
 ## Known limitations
 
