@@ -62,7 +62,10 @@ const DEADLINE_MARGIN_SECONDS = 3600n
 mountWallet()
 mountSiteChrome()
 
-const poolIdParam = new URLSearchParams(window.location.search).get('id')
+const pageParams = new URLSearchParams(window.location.search)
+/** Set by the launch flow, which is the only thing that knows a pool is new. */
+const justCreated = pageParams.get('created') === '1'
+const poolIdParam = pageParams.get('id')
 const poolIdHex = poolIdParam ? normalizeHex(poolIdParam) : null
 
 const pairTitle = qs<HTMLElement>(document, '#pool-pair')
@@ -177,14 +180,20 @@ async function waitForPool(): Promise<PoolView | null> {
         poolBoot.hidden = true
         return view
       }
-      setText(poolBootTitle, 'Looking for this pool')
+      // A pool that exists but has not reached the indexer yet is a loading
+      // state, not a missing one. Only the launch flow knows it just created a
+      // pool, and it says so in the URL; everything else is a general wait.
+      setText(poolBootTitle, justCreated ? 'Looking for this pool' : 'Loading pool')
       setText(
         poolBootDetail,
-        attempt < 12
-          ? 'This pool is not visible yet. New pools appear a few seconds after their ' +
-              'creation transaction confirms.'
-          : 'This pool is still not visible. Check the pool id, or register the pool from ' +
-              'the Launch page.',
+        justCreated
+          ? attempt < 12
+            ? 'New pools appear a few seconds after their creation transaction confirms.'
+            : 'Still waiting. The indexer has not seen this pool yet; its registration ' +
+              'may still be confirming.'
+          : attempt < 12
+            ? 'Reading this pool from the indexer and the chain.'
+            : 'Still not visible. Check the pool id, or register the pool from the Launch page.',
       )
     } catch {
       setText(poolBootTitle, 'Pool data is unavailable')

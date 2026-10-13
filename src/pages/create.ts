@@ -427,11 +427,11 @@ async function run(): Promise<void> {
 
     if (!createdPoolId) throw new Error('Pool account is missing.')
     deployResult.hidden = false
-    deployResultLink.href = `/pool.html?id=${encodeURIComponent(createdPoolId)}`
+    deployResultLink.href = `/pool.html?id=${encodeURIComponent(createdPoolId)}&created=1`
     toast(`Pool ${shortHex(createdPoolId)} created and registered.`)
     flow = null
     flowStage = 'account'
-    window.location.href = `/pool.html?id=${encodeURIComponent(createdPoolId)}`
+    window.location.href = `/pool.html?id=${encodeURIComponent(createdPoolId)}&created=1`
   } catch (error) {
     console.error('[create-pool]', error)
     const message = error instanceof Error ? error.message : String(error)
@@ -579,7 +579,7 @@ async function resumeRegistration(): Promise<void> {
     })
     clearDraft()
     toast('Pool registered.')
-    window.location.href = `/pool.html?id=${encodeURIComponent(draft.poolId)}`
+    window.location.href = `/pool.html?id=${encodeURIComponent(draft.poolId)}&created=1`
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     showDeployError(message)

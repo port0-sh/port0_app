@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en" data-notice-key="port0-app:testnet-disclaimer:v1">
+<head>
+  <meta charset="UTF-8" />
+  <title>%VITE_BRAND_MARK_TEXT% Media kit</title>
+  <meta name="description" content="Logos, colors, and type for writing about port0.sh." />
+  <link rel="canonical" href="%VITE_SITE_URL%/media.html" />
+  <meta name="theme-color" content="#000000" />
+
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
+
+  <meta property="og:site_name" content="%VITE_BRAND_NAME%" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="%VITE_SITE_URL%/media.html" />
+  <meta property="og:title" content="%VITE_BRAND_TAGLINE%" />
+  <meta property="og:description" content="%VITE_BRAND_DESCRIPTION%" />
+  <meta property="og:image" content="%VITE_SITE_URL%/og-image.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="%VITE_BRAND_TAGLINE%" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="%VITE_BRAND_X_HANDLE%" />
+  <meta name="twitter:title" content="%VITE_BRAND_TAGLINE%" />
+  <meta name="twitter:description" content="%VITE_BRAND_DESCRIPTION%" />
+  <meta name="twitter:image" content="%VITE_SITE_URL%/twitter-card.png" />
+  <meta name="twitter:image:alt" content="%VITE_BRAND_TAGLINE%" />
+  <link rel="stylesheet" href="/src/styles/global.css" />
+  <style>
+    /* Media-kit-only previews. Kept on this page so the shared stylesheet does
+       not carry a class that one page uses. */
+    .kit-assets {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+      margin: 0 0 1em 0;
+    }
+    .kit-assets img {
+      display: block;
+      background-color: var(--black);
+    }
+    .kit-assets img.on-black {
+      border: 1px solid var(--dark-grey);
+      padding: 0.5rem;
+    }
+    .kit-swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin: 0 0 1em 0;
+    }
+    .kit-swatch {
+      width: 8rem;
+    }
+    .kit-swatch .chip {
+      height: 3rem;
+      border: 1px solid var(--dark-grey);
+    }
+    .kit-swatch .label {
+      margin-top: 0.25rem;
+      font-size: 0.85em;
+      color: var(--light-grey);
+    }
+  </style>
+  <script>
+    // Hides the testnet notice before the first paint when it was dismissed.
+    try {
+      if (localStorage.getItem(document.documentElement.dataset.noticeKey) === '1') {
+        document.documentElement.dataset.notice = 'dismissed'
+      }
+    } catch {
+      // Storage unavailable: the notice stays visible, which is the safe default.
+    }
+  </script>
+</head>
+<body data-page="Media kit">
+
+  <div id="testnet-notice">
+    <p>
+      <strong class="error">Miden testnet only.</strong> These tokens have no value, the network
+      can be reset, and the contracts can change. Do not send mainnet assets. Nothing here is
+      financial advice.
+    </p>
+    <button type="button" class="btn" id="notice-dismiss">Dismiss</button>
+  </div>
+
+  <header class="header">
+    <a class="brand" href="/">
+      <span class="brand-mark-box"><img src="/favicon.svg" alt="" class="brand-mark" /></span>
+      <span class="brand-name">%VITE_BRAND_NAME%</span>
+    </a>
+    <nav class="nav">
+      <a href="/">Pools</a>
+      <a href="/create.html">Launch</a>
+      <a href="/about.html">About</a>
+      <a href="https://docs.port0.sh" target="_blank" rel="noopener">Docs</a>
+    </nav>
+    <div class="wallet" id="wallet" aria-live="polite">
+      <button type="button" class="btn btn-primary">Login</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1>Media kit</h1>
+    <p class="muted">Logos, colors, and type for writing about port0.sh.</p>
+
+    <section class="panel">
+      <h2>Mark</h2>
+      <p>The bracketed [p0], on black.</p>
+      <div class="kit-assets">
+        <img class="on-black" src="/icon-512.png" alt="port0.sh mark" width="128" height="128" />
+      </div>
+      <ul>
+        <li><a href="/favicon.svg" download>favicon.svg</a> (SVG)</li>
+        <li><a href="/icon-512.png" download>icon-512.png</a> (PNG, 512&times;512)</li>
+        <li><a href="/icon-maskable-512.png" download>icon-maskable-512.png</a> (PNG, maskable)</li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>Wordmark</h2>
+      <p>port0 in cream, .sh in magenta.</p>
+      <div class="kit-assets">
+        <img class="on-black" src="/wordmark.svg" alt="port0.sh wordmark" width="360" />
+      </div>
+      <ul>
+        <li><a href="/wordmark.svg" download>wordmark.svg</a> (SVG)</li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>Colors</h2>
+      <div class="kit-swatches">
+        <div class="kit-swatch">
+          <div class="chip" style="background:#000000"></div>
+          <div class="label">black · #000000</div>
+        </div>
+        <div class="kit-swatch">
+          <div class="chip" style="background:#f200b9"></div>
+          <div class="label">magenta · #f200b9</div>
+        </div>
+        <div class="kit-swatch">
+          <div class="chip" style="background:#fff1e8"></div>
+          <div class="label">cream · #fff1e8</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Type</h2>
+      <p>Victor Mono for the interface. The ASCII art uses aahub_light.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Unfurl</h2>
+      <p>The card used for link previews.</p>
+      <div class="kit-assets">
+        <img class="on-black" src="/og-image.png" alt="port0.sh unfurl" width="480" />
+      </div>
+      <ul>
+        <li><a href="/og-image.png" download>og-image.png</a> (PNG, 1200&times;630)</li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>Usage</h2>
+      <ul>
+        <li>Do not alter the mark or the wordmark.</li>
+        <li>Place the mark on black, with clear space around it.</li>
+        <li>Write the name as port0.sh, lowercase, with the digit 0.</li>
+        <li>Do not imply that port0.sh is a Miden product, or that Miden endorses it.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer class="footer">Copyright © <span id="footer-year">2026</span> <span id="footer-brand">%VITE_BRAND_NAME%</span></footer>
+
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <script type="module" src="/src/pages/media.ts"></script>
+</body>
+</html>

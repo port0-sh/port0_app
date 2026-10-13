@@ -21,6 +21,27 @@
  * IPA Gothic (IPA Font License 1.0) so Japanese ASCII art keeps the widths its
  * authors assumed; the licences travel with the font in `public/fonts/`.
  */
+/*
+ * Victor Mono is the interface font. Self-hosted, latin subset, OFL 1.1, licence
+ * beside the files in public/fonts. `swap` so text is readable before it loads;
+ * the banner keeps aahub_light, whose metrics the artwork is drawn for.
+ */
+@font-face {
+  font-family: "Victor Mono";
+  src: url("/fonts/victor_mono_400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Victor Mono";
+  src: url("/fonts/victor_mono_700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @font-face {
   font-family: "aahub_light";
   src:
@@ -42,7 +63,7 @@ html {
 body {
   margin: 0;
   padding: 0;
-  font-family: "Courier Prime", "Courier New", "Liberation Mono", "FreeMono", monospace;
+  font-family: "Victor Mono", "Courier Prime", "Courier New", monospace;
   font-size: 16px;
   line-height: 1.5;
   color: var(--white);

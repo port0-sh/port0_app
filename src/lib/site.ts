@@ -16,9 +16,17 @@ import { el } from './dom'
 /** Where the chart library's attribution links to. */
 const TRADINGVIEW_URL = 'https://www.tradingview.com/'
 
+/** Social handles. Declared once; every page footer follows. */
+const SOCIALS: ReadonlyArray<{ label: string; href: string }> = [
+  { label: 'X', href: 'https://x.com/port0_sh' },
+  { label: 'Telegram', href: 'https://t.me/port0_sh' },
+  { label: 'GitHub', href: 'https://github.com/port0-sh' },
+]
+
 export function mountSiteChrome(): void {
   mountBrand()
   setFooterYear()
+  setFooterSocials()
   setChartAttribution()
   mountNotice()
 }
@@ -42,6 +50,17 @@ function setChartAttribution(): void {
       el('a', { href: TRADINGVIEW_URL, rel: 'noopener', target: '_blank' }, 'TradingView'),
     ),
   )
+}
+
+/** Appends the social links to the footer, once per page. */
+function setFooterSocials(): void {
+  const footer = document.querySelector('.footer')
+  if (!footer || footer.querySelector('.socials')) return
+  const wrap = el('span', { class: 'socials' })
+  for (const { label, href } of SOCIALS) {
+    wrap.append(' · ', el('a', { href, rel: 'noopener', target: '_blank' }, label))
+  }
+  footer.append(wrap)
 }
 
 function setFooterYear(): void {

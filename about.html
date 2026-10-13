@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>%VITE_BRAND_MARK_TEXT% About</title>
-  <meta name="description" content="What port0.sh is, how its constant-product pools work, and the risks of using it on testnet." />
+  <meta name="description" content="What port0.sh is, who built it, and where to find it." />
   <link rel="canonical" href="%VITE_SITE_URL%/about.html" />
   <meta name="theme-color" content="#000000" />
 
@@ -61,6 +61,7 @@
       <a href="/">Pools</a>
       <a href="/create.html">Launch</a>
       <a href="/about.html" class="active" aria-current="page">About</a>
+      <a href="https://docs.port0.sh">Docs</a>
     </nav>
     <div class="wallet" id="wallet" aria-live="polite">
       <button type="button" class="btn btn-primary">Login</button>
@@ -69,83 +70,47 @@
 
   <main class="container">
     <h1>About port0.sh</h1>
-    <p class="muted">
-      A constant-product automated market maker running on the Miden testnet. Pools,
-      swaps, liquidity, and the token launchpad are all real on-chain accounts and
-      notes; the tokens and the network are not.
-    </p>
 
     <section class="panel">
-      <h2>What it is</h2>
       <p>
-        port0.sh is an XYK (constant-product) AMM. A pool holds two fungible assets and
-        enforces the invariant <span class="mono">x · y = k</span> between their
-        reserves. A swap adds one asset and removes the other at the price the product
-        implies, minus a fee that accrues to liquidity providers and, at the
-        registry's rate, to the protocol account.
+        port0 is an open source exchange built on Miden. A safe harbor for any token.
       </p>
       <p>
-        Each pool is a single public Miden account. Its logic lives in an account
-        component, its state lives in account storage, and every operation arrives as a
-        network note the node consumes on the pool's behalf. There is no off-chain
-        order book and no server that holds your keys.
+        Anyone can dock a pool for any token pair. There is no gatekeeper. The registry
+        records a pool's code commitment, not a judgment, so any token can trade. Traders
+        swap against the pool. Liquidity providers deposit both assets and hold LP tokens
+        that carry a share of the reserves and the swap fees.
       </p>
-    </section>
-
-    <section class="panel">
-      <h2>How a pool works</h2>
-      <dl class="stats">
-        <div>
-          <dt>Reserves</dt>
-          <dd>The balances of the two pool assets, held in the pool account vault.</dd>
-        </div>
-        <div>
-          <dt>LP supply</dt>
-          <dd>The pool issues its own LP token as a native fungible asset. LPs hold it in proportion to their share of the reserves.</dd>
-        </div>
-        <div>
-          <dt>LP fee</dt>
-          <dd>Chosen per pool from three tiers: 0.05%, 0.30%, 1.00%. Paid by every swap to LPs.</dd>
-        </div>
-        <div>
-          <dt>Protocol fee</dt>
-          <dd>A share of the LP fee, fixed by the registry and sent to the protocol account. The swapper pays the LP fee tier and nothing more.</dd>
-        </div>
-      </dl>
-      <p class="muted">
-        Add liquidity by depositing both assets; the pool mints LP tokens at the current
-        ratio. Remove liquidity by burning LP tokens for your proportional share,
-        including accrued swap fees.
-      </p>
-    </section>
-
-    <section class="panel">
-      <h2>Fees and network costs</h2>
       <p>
-        Every transaction on Miden pays a network fee in the chain's native fee asset.
-        You must hold it in your wallet before you swap, deposit, withdraw, or create a
-        pool. Network-note operations pay the pool its note-consumption fee through a
-        sponsorship note that the app attaches automatically.
+        The contracts, the SDK, and the indexer are public. Anyone can run their own.
       </p>
-    </section>
-
-    <section class="panel">
-      <h2>Risk notice</h2>
-      <p class="error">Testnet only. The tokens are not real money and have no value.</p>
-      <ul>
-        <li>The Miden testnet is a work in progress. It can be reset, and balances and pools can disappear.</li>
-        <li>This app is a work in progress. Interfaces, contracts, and fees can change without notice.</li>
-        <li>Never send mainnet assets to any address shown here. There is no mainnet deployment.</li>
-        <li>Nothing here is financial advice. Do not deposit anything you cannot lose.</li>
-      </ul>
+      <p>
+        Built by <a href="https://mic0.dev" rel="noopener" target="_blank">mic0</a>.
+        Contact <a href="mailto:hello@port0.sh">hello@port0.sh</a>.
+      </p>
     </section>
 
     <section class="panel">
       <h2>Links</h2>
       <ul>
-        <li><a href="https://miden.xyz" rel="noopener noreferrer" target="_blank">Miden</a></li>
-        <li><a href="https://status.testnet.miden.io/" rel="noopener noreferrer" target="_blank">Testnet status</a></li>
-        <li><a href="https://docs.miden.xyz" rel="noopener noreferrer" target="_blank">Miden documentation</a></li>
+        <li><a href="https://docs.port0.sh" rel="noopener" target="_blank">Docs</a></li>
+        <li><a href="https://x.com/port0_sh" rel="noopener" target="_blank">X</a></li>
+        <li><a href="https://t.me/port0_sh" rel="noopener" target="_blank">Telegram</a></li>
+        <li><a href="https://github.com/port0-sh" rel="noopener" target="_blank">GitHub</a></li>
+        <li><a href="https://www.npmjs.com/package/@port0.sh/sdk" rel="noopener" target="_blank">npm</a></li>
+        <li><a href="https://status.testnet.miden.io/" rel="noopener" target="_blank">Testnet status</a></li>
+        <li><a href="/media.html">Media kit</a></li>
+      </ul>
+    </section>
+
+    <section class="panel">
+      <h2>Risk notice</h2>
+      <p class="error">Miden testnet only. The tokens have no value.</p>
+      <ul>
+        <li>The network can be reset, and balances and pools can disappear.</li>
+        <li>The contracts are unaudited. Interfaces, contracts, and fees can change without notice.</li>
+        <li>Do not send mainnet assets. There is no mainnet deployment.</li>
+        <li>Nothing here is financial advice. Do not deposit anything you cannot lose.</li>
       </ul>
     </section>
   </main>

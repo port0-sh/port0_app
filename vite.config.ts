@@ -25,6 +25,7 @@ export default defineConfig({
         pool: resolve(import.meta.dirname, 'pool.html'),
         create: resolve(import.meta.dirname, 'create.html'),
         about: resolve(import.meta.dirname, 'about.html'),
+        media: resolve(import.meta.dirname, 'media.html'),
       },
     },
   },
