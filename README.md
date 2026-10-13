@@ -42,17 +42,18 @@ Miden SDK. Deploy `dist/` to any static file host.
 
 ## Running the stack
 
-See [RUNBOOK.md](RUNBOOK.md). It covers the one-time operator setup
-(contracts, SDK artifacts, pool code commitment, registry, indexer, app),
-deploying a pool through the app, deploying a pool programmatically, and the
-failure conditions.
+See the [runbook](https://docs.port0.sh/operations/runbook.html). It covers the
+one-time operator setup (contracts, SDK artifacts, pool code commitment,
+registry, indexer, app), deploying a pool through the app, deploying a pool
+programmatically, and the failure conditions.
 
 In short, from a fresh checkout: build the contracts, build the SDK and run
 `npm run pool:commitment`, run `npm run registry:deploy` (fund the operator
 address it prints, then run again), start the indexer with
 `PORT0_REGISTRY_ID` set, then start the app with `VITE_REGISTRY_ID` and
 `VITE_INDEXER_URL` set. The browser fetches the indexer cross-origin in
-development; the indexer serves the API with permissive CORS.
+development, so the indexer's `INDEXER_ALLOWED_ORIGINS` must list the dev app
+origin; the indexer's `.env.example` already lists the Vite ports.
 
 ## Configuration
 
@@ -329,7 +330,7 @@ The pinned version matrix:
 | `@miden-sdk/miden-wallet-adapter-miden`    | 0.17.0  |
 | `@miden-sdk/para`                          | 0.17.0  |
 | `@getpara/web-sdk`                         | 3.18.0  |
-| `@port0.sh/sdk`                            | `file:` link to a local SDK checkout during SDK development |
+| `@port0.sh/sdk`                            | 0.1.0, pinned exactly to the published package |
 
 ## Known limitations
 
@@ -338,3 +339,12 @@ The pinned version matrix:
   the pool page.
 - Network note fees use the chain's own fee asset and faucet (0.17 protocol
   rule); the creator's wallet must hold the chain fee asset.
+
+## Source
+
+Radicle is the canonical source. GitHub is the mirror.
+
+| Source | Location |
+| --- | --- |
+| Radicle | https://radicle.network/nodes/iris.radicle.network/rad%3Az3fi1mouSisLs3PhaLxJiUZwhZnLd |
+| GitHub | https://github.com/port0-sh/port0_app |
