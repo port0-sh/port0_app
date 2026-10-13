@@ -175,6 +175,7 @@ a:active {
 
   .form-grid>input,
   .form-grid>select,
+  .form-grid>.token-picker,
   .form-grid>.fee-tiers {
     width: 100%;
     min-width: 0;
@@ -209,6 +210,27 @@ a:active {
 
 .brand:hover .brand-name {
   color: var(--white);
+}
+
+/*
+ * The mark's SVG keeps a wide margin around the glyph: right for a tab icon, too
+ * small for a header. The box crops that margin rather than the file being
+ * re-exported, and the glyph is centred, so a centred crop shows it whole.
+ */
+.brand-mark-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 4ch;
+  height: 1.75rem;
+  overflow: hidden;
+  flex: none;
+}
+
+.brand-mark-box img {
+  width: 4.4rem;
+  height: 4.4rem;
+  flex: none;
 }
 
 .brand-name {
@@ -278,6 +300,75 @@ a:active {
   margin: 0;
   font-weight: bold;
   word-break: break-all;
+}
+
+/* The pool page shows a few figures large, not every field small. */
+.stats-figures dd {
+  font-size: 1.4em;
+}
+
+/* A figure that carries more than one number, one per line. */
+.figure-line {
+  display: block;
+}
+
+.pool-links {
+  margin: 1rem 0 0;
+}
+
+.pool-links-head {
+  margin: 0 0 0.35rem;
+}
+
+/*
+ * One row per linked account: what it is, its id, a copy button, and a link to
+ * the explorer. The icons are inline SVG so they inherit the text colour and
+ * need no font.
+ */
+.link-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.15rem 0;
+}
+
+.link-label {
+  color: var(--light-grey);
+  min-width: 6ch;
+}
+
+.link-id {
+  color: var(--white);
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--light-grey);
+  cursor: pointer;
+  line-height: 0;
+}
+
+.icon-btn:hover:not(:disabled),
+.icon-btn:focus-visible {
+  color: var(--green);
+  border-color: var(--dark-grey);
+}
+
+.icon-btn svg {
+  width: 0.9rem;
+  height: 0.9rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* Tables */
@@ -363,6 +454,19 @@ button:disabled {
   font-size: 0.9em;
 }
 
+/* A select of the wallet's tokens, or the same field typed by hand. */
+.token-picker {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.token-picker select,
+.token-picker input {
+  flex: 1;
+  min-width: 0;
+}
+
 .form-actions {
   grid-column: 1 / -1;
   display: flex;
@@ -390,6 +494,16 @@ button:disabled {
 .btn-primary:hover:not(:disabled) {
   background-color: var(--green);
   color: var(--black);
+}
+
+/* A button that reads as a link, for mode toggles inside a form row. */
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--green);
+  font-weight: bold;
+  cursor: pointer;
 }
 
 /* Tabs */
@@ -714,10 +828,12 @@ dialog.modal::backdrop {
 }
 
 /*
- * The testnet notice: a strip above the header, not a gate. It is part of the
- * markup, so it reads without JavaScript, and the inline script in each page's
- * head sets `data-notice="dismissed"` before the first paint once it has been
- * dismissed, so a returning reader never sees it.
+ * The testnet notice: a full-width bar above the header, not a gate. It is part
+ * of the markup, so it reads without JavaScript, and the inline script in each
+ * page's head sets `data-notice="dismissed"` before the first paint once it has
+ * been dismissed, so a returning reader never sees it. The tint is the darkest
+ * green in the palette: enough to separate the bar from the page, not enough to
+ * read as an alert.
  */
 #testnet-notice {
   display: flex;
@@ -725,11 +841,13 @@ dialog.modal::backdrop {
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  max-width: 90ch;
-  margin: 0.5rem auto 0;
-  padding: 0.5rem 1ch;
-  border: 1px solid var(--dark-grey);
-  font-size: 0.9em;
+  width: 100%;
+  margin: 0;
+  padding: 0.4rem 2ch;
+  border: none;
+  border-bottom: 1px solid var(--dark-grey);
+  background-color: var(--darkest-green);
+  font-size: 0.85em;
 }
 
 #testnet-notice p {
@@ -856,7 +974,11 @@ html[data-notice='dismissed'] #testnet-notice {
 }
 
 .account-glyph {
-  color: var(--green);
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background-color: var(--green);
 }
 
 .account-caret {

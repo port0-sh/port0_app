@@ -15,9 +15,6 @@ const DEFAULT_MIDEN_RPC_URL = 'https://rpc.testnet.miden.io'
  */
 const DEFAULT_CHAIN_FEE_FAUCET_ID = '0x4cbdcaffe75f0a317482224dae6436'
 
-/** Path the Vite dev server proxies to the Miden RPC (see vite.config.ts). */
-const DEV_RPC_PROXY_PATH = '/rpc.Api'
-
 export const CONFIG = {
   appName: 'port0.sh',
 
@@ -28,6 +25,8 @@ export const CONFIG = {
   brand: {
     /** Wordmark and page-title name. */
     name: import.meta.env.VITE_BRAND_NAME?.trim() || 'port0.sh',
+    /** Text form of the mark, used in page titles the app sets at runtime. */
+    markText: import.meta.env.VITE_BRAND_MARK_TEXT?.trim() || '[p0]',
     /** Single-line text mark beside the header logo. */
     logoText: import.meta.env.VITE_BRAND_LOGO_TEXT?.trim() ?? '',
     /** One line under the name on the home page; hidden when empty. */
@@ -35,13 +34,15 @@ export const CONFIG = {
   },
 
   /**
-   * RPC endpoint for on-chain reads. In development this is the same-origin
-   * proxy path; in production it is VITE_MIDEN_RPC_URL or the public testnet
-   * RPC endpoint.
+   * RPC endpoint for on-chain reads: scheme and host, nothing else.
+   *
+   * The same value serves development and a build. The node sends the CORS
+   * headers a browser needs, so no dev-server proxy is involved, and the SDK
+   * appends the gRPC service path itself: a base that already carries a path is
+   * rejected with `Invalid node URL`.
    */
-  midenRpcUrl: import.meta.env.DEV
-    ? DEV_RPC_PROXY_PATH
-    : (import.meta.env.VITE_MIDEN_RPC_URL?.trim() || DEFAULT_MIDEN_RPC_URL),
+  midenRpcUrl:
+    import.meta.env.VITE_MIDEN_RPC_URL?.trim() || DEFAULT_MIDEN_RPC_URL,
 
   /**
    * Faucet of the chain's fee asset (the 0.17 protocol configuration).
@@ -85,4 +86,10 @@ export const CONFIG = {
    * chain reads.
    */
   indexerUrl: import.meta.env.VITE_INDEXER_URL?.trim() ?? '',
+
+  /**
+   * Block explorer, without a trailing slash. Account ids are appended, so an
+   * empty value simply leaves the links off the page.
+   */
+  explorerUrl: import.meta.env.VITE_EXPLORER_URL?.trim() ?? '',
 } as const

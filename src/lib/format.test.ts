@@ -7,9 +7,12 @@ import {
   formatRate,
   isHexId,
   normalizeHex,
+  explorerAccountUrl,
+  feeSplit,
   parseAmount,
   shortAddress,
   shortHex,
+  poolPageTitle,
 } from './format'
 
 describe('isHexId', () => {
@@ -169,5 +172,47 @@ describe('compactAmount', () => {
 
   it('marks a negative amount', () => {
     expect(compactAmount(-2500000000n, 0)).toBe('-2.5B')
+  })
+})
+
+describe('poolPageTitle', () => {
+  it('names the pool with its price once liquidity exists', () => {
+    expect(poolPageTitle('[p0]', '0.430897', 'MICO', 'ZAZA')).toBe('[p0] 0.430897 MICO / ZAZA')
+  })
+
+  it('omits the price when the pool holds nothing', () => {
+    expect(poolPageTitle('[p0]', null, 'MICO', 'ZAZA')).toBe('[p0] MICO / ZAZA')
+  })
+})
+
+describe('explorerAccountUrl', () => {
+  it('appends the id, with or without a trailing slash', () => {
+    expect(explorerAccountUrl('https://x.test/account', '0xabc')).toBe('https://x.test/account/0xabc')
+    expect(explorerAccountUrl('https://x.test/account/', '0xabc')).toBe('https://x.test/account/0xabc')
+  })
+
+  it('returns null when either side is unknown', () => {
+    expect(explorerAccountUrl('', '0xabc')).toBeNull()
+    expect(explorerAccountUrl('https://x.test', '')).toBeNull()
+  })
+})
+
+describe('feeSplit', () => {
+  it('divides the tier the swapper pays', () => {
+    expect(feeSplit(30n, 1200n)).toEqual({
+      effective: '0.30%',
+      protocol: '0.0360%',
+      lpKeeps: '0.2640%',
+      share: '12.00%',
+    })
+  })
+
+  it('leaves the whole tier with the LPs when the share is zero', () => {
+    expect(feeSplit(100n, 0n)).toEqual({
+      effective: '1.00%',
+      protocol: '0.0000%',
+      lpKeeps: '1.0000%',
+      share: '0.00%',
+    })
   })
 })

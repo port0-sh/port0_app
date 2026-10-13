@@ -124,7 +124,7 @@ export function mountWallet(): void {
           else close()
         },
       },
-      el('span', { class: 'account-glyph', 'aria-hidden': 'true' }, '☻'),
+      el('span', { class: 'account-glyph', 'aria-hidden': 'true' }),
       el('span', { class: 'mono', title: address }, shortAddress(address)),
       el('span', { class: 'account-caret', 'aria-hidden': 'true' }, '▾'),
     )

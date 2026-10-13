@@ -138,3 +138,50 @@ export function compactAmount(amount: bigint, decimals: number): string {
   }
   return formatAmount(amount, decimals)
 }
+
+/**
+ * The tab title of a pool page: mark, price, pair.
+ *
+ * A pool page has no URL of its own beyond `?id=`, so the title is what tells
+ * several open pools apart. The price is omitted until the pool holds liquidity,
+ * which is why it is nullable rather than rendered as a placeholder.
+ */
+export function poolPageTitle(
+  markText: string,
+  price: string | null,
+  token0: string,
+  token1: string,
+): string {
+  return [markText, price ?? '', `${token0} / ${token1}`]
+    .filter((part) => part.length > 0)
+    .join(' ')
+}
+
+/** Explorer URL for an account, or null when no explorer is configured. */
+export function explorerAccountUrl(base: string, id: string): string | null {
+  const root = base.trim().replace(/\/+$/, '')
+  return root.length === 0 || id.length === 0 ? null : `${root}/${id}`
+}
+
+/**
+ * How a fee tier is divided.
+ *
+ * The swapper pays the LP fee tier; the protocol takes a share of it, so the
+ * protocol's cut is inside the effective fee rather than added to it. Percentages
+ * are display values, which is why they are strings here.
+ */
+export function feeSplit(
+  lpFeeBps: bigint,
+  shareBps: bigint,
+): { effective: string; protocol: string; lpKeeps: string; share: string } {
+  const lp = Number(lpFeeBps)
+  const share = Number(shareBps)
+  const protocolBps = (lp * share) / 10_000
+  const percent = (bps: number): string => `${(bps / 100).toFixed(4)}%`
+  return {
+    effective: formatBps(lpFeeBps),
+    protocol: percent(protocolBps),
+    lpKeeps: percent(lp - protocolBps),
+    share: formatBps(shareBps),
+  }
+}

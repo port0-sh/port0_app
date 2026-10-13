@@ -8,8 +8,6 @@ import { resolve } from 'node:path'
 // app pins Vite 8):
 // - build.target 'esnext' for top-level await in the WASM entry points
 // - the SDK and its WASM are excluded from dev pre-bundling
-// - in dev, the gRPC-web RPC is reached through a same-origin proxy so the
-//   browser never sends cross-origin gRPC-web requests
 export default defineConfig({
   envPrefix: ['VITE_'],
   resolve: {
@@ -32,13 +30,5 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['@miden-sdk/miden-sdk', 'port0-sdk'],
-  },
-  server: {
-    proxy: {
-      '/rpc.Api': {
-        target: process.env.VITE_MIDEN_RPC_URL || 'https://rpc.testnet.miden.io',
-        changeOrigin: true,
-      },
-    },
   },
 })

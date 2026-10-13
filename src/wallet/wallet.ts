@@ -182,10 +182,32 @@ export async function connect(kind: WalletKind): Promise<void> {
       WalletAdapterNetwork.Testnet,
       AllowedPrivateData.Assets | AllowedPrivateData.Notes,
     )
+    adoptAdapterState(adapter)
   } catch (error) {
     walletStore.set({ connecting: false })
     throw error
   }
+}
+
+/**
+ * Mirrors the adapter's own session into the store.
+ *
+ * The adapter suppresses its `connect` event when it already considers itself
+ * authorized, so the absence of an event is not the absence of a session, and a
+ * page that waited for one would keep asking a connected wallet to log in. The
+ * adapter's own `connected` and `address` are the reliable signal.
+ */
+function adoptAdapterState(adapter: Awaited<ReturnType<typeof getBreadWallet>>): boolean {
+  if (!adapter.connected || !adapter.address) return false
+  saveSession(adapter.address)
+  walletStore.set({
+    kind: 'bread',
+    connecting: false,
+    connected: true,
+    address: adapter.address,
+    error: null,
+  })
+  return true
 }
 
 /**
@@ -199,7 +221,7 @@ export async function restoreSession(): Promise<boolean> {
   const saved = loadSession()
   if (!saved) return false
   const adapter = await getBreadWallet()
-  if (adapter.connected) return true
+  if (adoptAdapterState(adapter)) return true
   if (adapter.readyState !== WalletReadyState.Installed) return false
   walletStore.set({ connecting: true, error: null })
   try {
@@ -208,7 +230,7 @@ export async function restoreSession(): Promise<boolean> {
       WalletAdapterNetwork.Testnet,
       AllowedPrivateData.Assets | AllowedPrivateData.Notes,
     )
-    return adapter.connected
+    return adoptAdapterState(adapter)
   } catch {
     // Locked wallet, transient failure: stay logged out, keep the saved
     // session for the next page load.

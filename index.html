@@ -2,17 +2,33 @@
 <html lang="en" data-notice-key="port0-app:testnet-disclaimer:v1">
 <head>
   <meta charset="UTF-8" />
-  <title>%VITE_BRAND_NAME% — Pools</title>
+  <title>%VITE_BRAND_MARK_TEXT% Pools</title>
   <meta name="description" content="Browse, swap on, and provide liquidity to port0.sh constant-product pools on Miden." />
+  <link rel="canonical" href="%VITE_SITE_URL%/" />
+  <meta name="theme-color" content="#000000" />
+
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
+
   <meta property="og:site_name" content="%VITE_BRAND_NAME%" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="%VITE_BRAND_NAME% — Pools" />
-  <meta property="og:description" content="Browse, swap on, and provide liquidity to port0.sh constant-product pools on Miden." />
-  <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="%VITE_BRAND_NAME% — Pools" />
-  <meta name="twitter:description" content="Browse, swap on, and provide liquidity to port0.sh constant-product pools on Miden." />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta property="og:url" content="%VITE_SITE_URL%/" />
+  <meta property="og:title" content="%VITE_BRAND_TAGLINE%" />
+  <meta property="og:description" content="%VITE_BRAND_DESCRIPTION%" />
+  <meta property="og:image" content="%VITE_SITE_URL%/og-image.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="%VITE_BRAND_TAGLINE%" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="%VITE_BRAND_X_HANDLE%" />
+  <meta name="twitter:title" content="%VITE_BRAND_TAGLINE%" />
+  <meta name="twitter:description" content="%VITE_BRAND_DESCRIPTION%" />
+  <meta name="twitter:image" content="%VITE_SITE_URL%/twitter-card.png" />
+  <meta name="twitter:image:alt" content="%VITE_BRAND_TAGLINE%" />
   <link rel="stylesheet" href="/src/styles/global.css" />
   <script>
     // Hides the testnet notice before the first paint when it was dismissed.
@@ -29,11 +45,9 @@
 
   <div id="testnet-notice">
     <p>
-      <strong class="error">Testnet only.</strong> These are test tokens, not real money.
-      port0.sh runs on the Miden testnet: the network can be reset, and pools and balances can
-      disappear. The app and the contracts are a work in progress, so interfaces, contracts, and
-      fees can change without notice. Do not send mainnet assets. Nothing here is financial
-      advice.
+      <strong class="error">Miden testnet only.</strong> These tokens have no value, the network
+      can be reset, and the contracts can change. Do not send mainnet assets. Nothing here is
+      financial advice.
     </p>
     <button type="button" class="btn" id="notice-dismiss">Dismiss</button>
   </div>

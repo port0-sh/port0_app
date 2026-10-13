@@ -20,7 +20,21 @@ import {
 } from '../lib/client'
 import { CONFIG } from '../lib/config'
 import { clear, el, qs, setText } from '../lib/dom'
-import { formatAmount, formatBps, formatDuration, formatRate, isHexId, normalizeHex, parseAmount, shortHex, withHexPrefix } from '../lib/format'
+import {
+  compactAmount,
+  explorerAccountUrl,
+  feeSplit,
+  formatAmount,
+  formatBps,
+  formatDuration,
+  formatRate,
+  isHexId,
+  normalizeHex,
+  parseAmount,
+  poolPageTitle,
+  shortHex,
+  withHexPrefix,
+} from '../lib/format'
 import { fetchPool, fetchPoolHistory, toPoolView, type HistoryResolution, type IndexerPool, type IndexerSnapshot, type PoolView } from '../lib/indexer'
 import { candles, formatScaled, priceScaled, sampleTime } from '../lib/history'
 import { mountPriceChart, type ChartTheme, type PriceChart } from '../lib/chart'
@@ -53,13 +67,10 @@ const poolIdHex = poolIdParam ? normalizeHex(poolIdParam) : null
 const pairTitle = qs<HTMLElement>(document, '#pool-pair')
 const poolIdLine = qs<HTMLElement>(document, '#pool-id')
 const poolError = qs<HTMLParagraphElement>(document, '#pool-error')
-const statReserve0 = qs<HTMLElement>(document, '#stat-reserve0')
-const statReserve1 = qs<HTMLElement>(document, '#stat-reserve1')
-const statLpFee = qs<HTMLElement>(document, '#stat-lp-fee')
-const statProtocolFee = qs<HTMLElement>(document, '#stat-protocol-fee')
-const statLpSupply = qs<HTMLElement>(document, '#stat-lp-supply')
-const statYield = qs<HTMLElement>(document, '#stat-yield')
-const statFees = qs<HTMLElement>(document, '#stat-fees')
+const statFee = qs<HTMLElement>(document, '#stat-fee')
+const statVolume = qs<HTMLElement>(document, '#stat-volume')
+const statApr = qs<HTMLElement>(document, '#stat-apr')
+const poolLinks = qs<HTMLElement>(document, '#pool-links')
 
 const swapForm = qs<HTMLFormElement>(document, '#swap-form')
 const swapSide = qs<HTMLSelectElement>(document, '#swap-side')
@@ -200,6 +211,7 @@ async function boot(): Promise<void> {
   poolStats.hidden = false
   renderIndexedPrice()
   renderPoolStats()
+  void renderLinks()
   if (record.feeFaucetId.length === 0) {
     toast('Trading is disabled for this pool: it has no fee asset configured.', 'error', 12000)
   }
@@ -252,14 +264,24 @@ async function loadState(): Promise<void> {
 function renderSummary(): void {
   if (!currentState || !record) return
   const state = currentState
-  setText(statReserve0, formatAmount(state.reserve0, record.token0Decimals))
-  setText(statReserve1, formatAmount(state.reserve1, record.token1Decimals))
-  setText(statLpFee, formatBps(state.fees.lpFeeBps))
-  // The registry's share of the LP fee, not an extra charge: the swapper pays
-  // the LP fee tier either way.
-  setText(statProtocolFee, `${formatBps(state.fees.protocolFeeShareBps)} of the LP fee`)
-  setText(statLpSupply, state.lpSupply.toString())
-  renderPriceNow(priceToken0InToken1(state))
+  const split = feeSplit(state.fees.lpFeeBps, state.fees.protocolFeeShareBps)
+  setText(statFee, split.effective)
+  // The swapper pays the LP fee tier; the protocol's cut is inside it, so the
+  // three numbers are the tier, the cut, and what the LPs keep.
+  statFee.title =
+    `Effective fee ${split.effective}\n` +
+    `Protocol cut ${split.share} of it, ${split.protocol}\n` +
+    `LPs keep ${split.lpKeeps}`
+  const price = priceToken0InToken1(state)
+  renderPriceNow(price)
+  // The tab names the pool, not the site, once the pool's own price is known.
+  // Until then the page keeps the static title.
+  document.title = poolPageTitle(
+    CONFIG.brand.markText,
+    price,
+    record.token0Symbol,
+    record.token1Symbol,
+  )
 }
 
 /** Renders the headline price. `null` means the pool holds no liquidity. */
@@ -297,13 +319,122 @@ function renderPoolStats(): void {
   const pool = indexedPool
   const view = record
   if (!pool || !view) return
-  statYield.textContent =
+  setText(
+    statApr,
     pool.fee_apr_window_secs > 0
-      ? `${formatRate(pool.fee_apr)} ${formatDuration(pool.fee_apr_window_secs)}`
-      : '—'
-  const fees0 = formatAmount(BigInt(pool.lp_fees_24h_0), view.token0Decimals)
-  const fees1 = formatAmount(BigInt(pool.lp_fees_24h_1), view.token1Decimals)
-  statFees.textContent = `${fees0} ${view.token0Symbol} · ${fees1} ${view.token1Symbol}`
+      ? `${formatRate(pool.fee_apr)} over ${formatDuration(pool.fee_apr_window_secs)}`
+      : '—',
+  )
+  // One line per side: on one line the pair wraps and the second amount is lost.
+  setText(statVolume, '')
+  statVolume.append(
+    el(
+      'span',
+      { class: 'figure-line' },
+      `${compactAmount(BigInt(pool.volume_24h_0), view.token0Decimals)} ${view.token0Symbol}`,
+    ),
+    el(
+      'span',
+      { class: 'figure-line' },
+      `${compactAmount(BigInt(pool.volume_24h_1), view.token1Decimals)} ${view.token1Symbol}`,
+    ),
+  )
+}
+
+/** The bech32 form of an account id, which is what an explorer link takes. */
+async function bech32(id: string): Promise<string> {
+  const { AccountId, AccountInterface, NetworkId } = await sdkModule()
+  return AccountId.fromHex(withHexPrefix(id)).toBech32(
+    NetworkId.testnet(),
+    AccountInterface.BasicWallet,
+  )
+}
+
+/** A 16x16 line icon, built in the SVG namespace so it renders. */
+function icon(pathData: string): SVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.setAttribute('viewBox', '0 0 16 16')
+  svg.setAttribute('aria-hidden', 'true')
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  path.setAttribute('d', pathData)
+  svg.append(path)
+  return svg
+}
+
+const COPY_ICON = 'M6 5.5h6.5V14H6zM3.5 10.5v-8h6.5'
+const EXTERNAL_ICON = 'M7 3.5h5.5V9M12.5 3.5 5 11'
+
+/**
+ * Copies an address.
+ *
+ * The clipboard is a permission and a user gesture, so a refusal is reported
+ * rather than passed off as a copy.
+ */
+async function copyAddress(id: string, label: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(withHexPrefix(id))
+    toast(`${label} address copied.`)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    toast(`Could not copy the ${label} address: ${message}`, 'error')
+  }
+}
+
+/** One linked account: label, shortened id, copy button, and explorer link. */
+function linkRow(label: string, id: string, url: string | null): HTMLElement {
+  const row = el(
+    'div',
+    { class: 'link-row' },
+    el('span', { class: 'link-label' }, label),
+    el('span', { class: 'mono link-id' }, shortHex(id)),
+  )
+  row.append(
+    el(
+      'button',
+      {
+        class: 'icon-btn',
+        type: 'button',
+        'aria-label': `Copy the ${label} address`,
+        title: `Copy the ${label} address`,
+        onclick: () => void copyAddress(id, label),
+      },
+      icon(COPY_ICON),
+    ),
+  )
+  if (url !== null) {
+    row.append(
+      el(
+        'a',
+        {
+          class: 'icon-btn',
+          href: url,
+          target: '_blank',
+          rel: 'noopener',
+          'aria-label': `Open the ${label} address in the explorer`,
+          title: `Open the ${label} address in the explorer`,
+        },
+        icon(EXTERNAL_ICON),
+      ),
+    )
+  }
+  return row
+}
+
+/** Rows for the pool and for both of its faucets. */
+async function renderLinks(): Promise<void> {
+  if (!record || poolIdHex === null) return
+  const [poolUrl, token0Url, token1Url] = await Promise.all([
+    explorerAccountUrl(CONFIG.explorerUrl, await bech32(poolIdHex)),
+    explorerAccountUrl(CONFIG.explorerUrl, await bech32(record.token0FaucetId)),
+    explorerAccountUrl(CONFIG.explorerUrl, await bech32(record.token1FaucetId)),
+  ])
+  for (const row of poolLinks.querySelectorAll('.link-row')) row.remove()
+  poolLinks.append(
+    linkRow('Pool', poolIdHex, poolUrl),
+    linkRow(record.token0Symbol, record.token0FaucetId, token0Url),
+    linkRow(record.token1Symbol, record.token1FaucetId, token1Url),
+  )
+  poolLinks.hidden = false
 }
 
 /** Re-reads the pool metadata from the indexer; keeps the last view on error. */

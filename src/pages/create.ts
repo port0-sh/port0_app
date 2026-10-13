@@ -74,13 +74,11 @@ mountSiteChrome()
 
 /* Pool parameters. */
 
-const token0Input = qs<HTMLInputElement>(document, '#param-token0')
-const token1Input = qs<HTMLInputElement>(document, '#param-token1')
 
 // Wallet-token pickers; the text inputs stay the source of truth. Mounted for
 // their controls: the selection updates the inputs directly.
-mountTokenPicker('param-token0-select', 'param-token0', 'token0-toggle')
-mountTokenPicker('param-token1-select', 'param-token1', 'token1-toggle')
+const token0Picker = mountTokenPicker('param-token0-select')
+const token1Picker = mountTokenPicker('param-token1-select')
 
 // Prevent picking the same token twice: each select disables the option the
 // other one has selected.
@@ -105,13 +103,6 @@ const stepRegister = qs<HTMLLIElement>(document, '#step-register')
 const resumeBanner = qs<HTMLParagraphElement>(document, '#resume-register')
 const resumePoolId = qs<HTMLSpanElement>(document, '#resume-pool-id')
 const resumeButton = qs<HTMLButtonElement>(document, '#resume-register-button')
-const registerForm = qs<HTMLFormElement>(document, '#register-form')
-const registerPoolIdInput = qs<HTMLInputElement>(document, '#register-pool-id')
-const registerButton = qs<HTMLButtonElement>(
-  registerForm,
-  'button[type="submit"]',
-)
-const registerStatus = qs<HTMLSpanElement>(document, '#register-status')
 const deployError = qs<HTMLParagraphElement>(document, '#deploy-error')
 const deployButton = qs<HTMLButtonElement>(document, '#deploy-button')
 const retryButton = qs<HTMLButtonElement>(document, '#retry-button')
@@ -243,8 +234,11 @@ function selectedFeeTierBps(): bigint {
 }
 
 async function readParams(): Promise<PoolParams> {
-  const token0 = await parseAccountRef(token0Input.value, 'Token 0 faucet id')
-  const token1 = await parseAccountRef(token1Input.value, 'Token 1 faucet id')
+  if (token0Select.value === '' || token1Select.value === '') {
+    throw new Error('Pick both tokens from your wallet.')
+  }
+  const token0 = await parseAccountRef(token0Select.value, 'Token 0 faucet id')
+  const token1 = await parseAccountRef(token1Select.value, 'Token 1 faucet id')
   if (token0.toString() === token1.toString()) {
     throw new Error('Token 0 and token 1 must be different faucets.')
   }
@@ -489,8 +483,8 @@ function clearDraft(): void {
 /** Saves the form inputs, so a reload after an error keeps the parameters. */
 function saveFormDraft(): void {
   writeDraft({
-    token0: token0Input.value,
-    token1: token1Input.value,
+    token0: token0Select.value,
+    token1: token1Select.value,
     lpFeeBps: selectedFeeTierBps().toString(),
   })
 }
@@ -503,8 +497,8 @@ function rememberPoolDraft(poolId: string): void {
 /** Restores the form inputs and the pending-registration banner. */
 function restoreDraft(): void {
   const draft = readDraft()
-  if (draft.token0) token0Input.value = draft.token0
-  if (draft.token1) token1Input.value = draft.token1
+  if (draft.token0) token0Picker.setValue(draft.token0)
+  if (draft.token1) token1Picker.setValue(draft.token1)
   if (draft.lpFeeBps) {
     const radio = feeTiers.querySelector<HTMLInputElement>(
       `input[name="lpFee"][value="${draft.lpFeeBps}"]`,
@@ -564,15 +558,18 @@ async function registerPoolOnRegistry(params: {
 
 /** Finishes registration for a pool deployed in a previous session. */
 async function resumeRegistration(): Promise<void> {
+  // The draft is the pool's own record of its tokens, and it is the only source
+  // this path can trust: the wallet may hold a different pair by now, and the
+  // pool was created from the pair the draft names.
   const draft = readDraft()
-  if (!draft.poolId) return
+  if (!draft.poolId || !draft.token0 || !draft.token1) return
   try {
     const admin = await walletAccountId()
     if (!admin) throw new Error('Login first.')
     const [{ AccountId }, token0, token1] = await Promise.all([
       sdkModule(),
-      parseAccountRef(token0Input.value, 'Token 0 faucet id'),
-      parseAccountRef(token1Input.value, 'Token 1 faucet id'),
+      parseAccountRef(draft.token0, 'Token 0 faucet id'),
+      parseAccountRef(draft.token1, 'Token 1 faucet id'),
     ])
     await registerPoolOnRegistry({
       poolId: AccountId.fromHex(withHexPrefix(draft.poolId)),
@@ -590,50 +587,12 @@ async function resumeRegistration(): Promise<void> {
   }
 }
 
-/** Registers a deployed pool found by account id. */
-async function registerExistingPool(): Promise<void> {
-  const raw = registerPoolIdInput.value.trim()
-  if (!raw) return
-  if (CONFIG.registryId.length === 0) {
-    setText(registerStatus, 'VITE_REGISTRY_ID is not set.')
-    return
-  }
-  registerButton.disabled = true
-  setText(registerStatus, 'reading pool…')
-  try {
-    const admin = await walletAccountId()
-    if (!admin) throw new Error('Login first.')
-    const [{ decodePoolState }, poolId] = await Promise.all([
-      xykModule(),
-      parseAccountRef(raw, 'Pool account id'),
-    ])
-    const account = await getPublicAccount(poolId.toString())
-    const state = decodePoolState(account)
-    await registerPoolOnRegistry({
-      poolId: state.accountId,
-      admin,
-      token0: state.token0FaucetId,
-      token1: state.token1FaucetId,
-    })
-    clearDraft()
-    setText(registerStatus, 'registered')
-    registerPoolIdInput.value = ''
-    toast('Pool registered.')
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
-    setText(registerStatus, message)
-    toast(message, 'error')
-  } finally {
-    registerButton.disabled = false
-  }
-}
-
 /* Wire-up. */
 
 feeTiers.addEventListener('change', renderFeeBreakdown)
 feeTiers.addEventListener('change', saveFormDraft)
-token0Input.addEventListener('change', saveFormDraft)
-token1Input.addEventListener('change', saveFormDraft)
+token0Select.addEventListener('change', saveFormDraft)
+token1Select.addEventListener('change', saveFormDraft)
 resumeButton.addEventListener('click', () => {
   void resumeRegistration()
 })
@@ -647,10 +606,6 @@ restartButton.addEventListener('click', () => {
   restartButton.hidden = true
   clearDraft()
   void run()
-})
-registerForm.addEventListener('submit', (event) => {
-  event.preventDefault()
-  void registerExistingPool()
 })
 restoreDraft()
 renderFeeBreakdown()

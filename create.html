@@ -2,17 +2,33 @@
 <html lang="en" data-notice-key="port0-app:testnet-disclaimer:v1">
 <head>
   <meta charset="UTF-8" />
-  <title>%VITE_BRAND_NAME% — Launch</title>
+  <title>%VITE_BRAND_MARK_TEXT% Launch</title>
   <meta name="description" content="Launch a token and deploy a port0.sh constant-product pool on Miden." />
+  <link rel="canonical" href="%VITE_SITE_URL%/create.html" />
+  <meta name="theme-color" content="#000000" />
+
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
+
   <meta property="og:site_name" content="%VITE_BRAND_NAME%" />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="%VITE_BRAND_NAME% — Launch" />
-  <meta property="og:description" content="Launch a token and deploy a port0.sh constant-product pool on Miden." />
-  <meta name="twitter:card" content="summary" />
-  <meta name="twitter:title" content="%VITE_BRAND_NAME% — Launch" />
-  <meta name="twitter:description" content="Launch a token and deploy a port0.sh constant-product pool on Miden." />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta property="og:url" content="%VITE_SITE_URL%/create.html" />
+  <meta property="og:title" content="%VITE_BRAND_TAGLINE%" />
+  <meta property="og:description" content="%VITE_BRAND_DESCRIPTION%" />
+  <meta property="og:image" content="%VITE_SITE_URL%/og-image.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="%VITE_BRAND_TAGLINE%" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="%VITE_BRAND_X_HANDLE%" />
+  <meta name="twitter:title" content="%VITE_BRAND_TAGLINE%" />
+  <meta name="twitter:description" content="%VITE_BRAND_DESCRIPTION%" />
+  <meta name="twitter:image" content="%VITE_SITE_URL%/twitter-card.png" />
+  <meta name="twitter:image:alt" content="%VITE_BRAND_TAGLINE%" />
   <link rel="stylesheet" href="/src/styles/global.css" />
   <script>
     // Hides the testnet notice before the first paint when it was dismissed.
@@ -29,18 +45,16 @@
 
   <div id="testnet-notice">
     <p>
-      <strong class="error">Testnet only.</strong> These are test tokens, not real money.
-      port0.sh runs on the Miden testnet: the network can be reset, and pools and balances can
-      disappear. The app and the contracts are a work in progress, so interfaces, contracts, and
-      fees can change without notice. Do not send mainnet assets. Nothing here is financial
-      advice.
+      <strong class="error">Miden testnet only.</strong> These tokens have no value, the network
+      can be reset, and the contracts can change. Do not send mainnet assets. Nothing here is
+      financial advice.
     </p>
     <button type="button" class="btn" id="notice-dismiss">Dismiss</button>
   </div>
 
   <header class="header">
     <a class="brand" href="/">
-      <img src="/favicon.svg" alt="" class="brand-mark" width="28" height="28" />
+      <span class="brand-mark-box"><img src="/favicon.svg" alt="" class="brand-mark" /></span>
       <span class="brand-name">%VITE_BRAND_NAME%</span>
     </a>
     <nav class="nav">
@@ -61,7 +75,31 @@
 
 
     <section class="panel">
-      <h2>1. Deploy</h2>
+      <h2>Pool parameters</h2>
+      <form id="params-form" class="form-grid" autocomplete="off">
+        <label for="param-token0-select">Token 0</label>
+        <div class="token-picker">
+          <select id="param-token0-select" class="token-select"></select>
+        </div>
+
+        <label for="param-token1-select">Token 1</label>
+        <div class="token-picker">
+          <select id="param-token1-select" class="token-select"></select>
+        </div>
+
+        <label>LP fee tier</label>
+        <div class="fee-tiers" id="fee-tiers">
+          <label><input type="radio" name="lpFee" value="5" /> 0.05%</label>
+          <label><input type="radio" name="lpFee" value="30" checked /> 0.30%</label>
+          <label><input type="radio" name="lpFee" value="100" /> 1.00%</label>
+        </div>
+
+        <span id="param-fee-breakdown" class="muted hint"></span>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Deploy</h2>
       <ol class="steps" id="deploy-steps">
         <li id="step-account" data-state="idle">Create pool account <span class="muted">— waiting</span></li>
         <li id="step-deploy" data-state="idle">Deploy pool account <span class="muted">— waiting</span></li>
@@ -80,22 +118,6 @@
       </div>
       <p class="muted" style="margin-top: 0.75rem">Network fees are paid from your wallet in USDCX.</p>
       <p id="deploy-result" hidden>Pool created: <a id="deploy-result-link" href="/pool.html">open pool page →</a></p>
-    </section>
-
-    <section class="panel">
-      <h2>2. Register an existing pool</h2>
-      <p class="muted">
-        A configured pool that is not yet in the registry. The register note is emitted
-        from the connected wallet and consumed by the registry account.
-      </p>
-      <form id="register-form" class="form-grid" autocomplete="off">
-        <label for="register-pool-id">Pool account id</label>
-        <input id="register-pool-id" type="text" placeholder="0x…" spellcheck="false" required />
-        <div class="form-actions">
-          <button type="submit" class="btn">Register</button>
-          <span class="muted" id="register-status"></span>
-        </div>
-      </form>
     </section>
   </main>
 
