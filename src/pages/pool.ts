@@ -32,6 +32,7 @@ import {
   normalizeHex,
   parseAmount,
   poolPageTitle,
+  shortAddress,
   shortHex,
   withHexPrefix,
 } from '../lib/format'
@@ -386,7 +387,7 @@ function linkRow(label: string, id: string, url: string | null): HTMLElement {
     'div',
     { class: 'link-row' },
     el('span', { class: 'link-label' }, label),
-    el('span', { class: 'mono link-id' }, shortHex(id)),
+    el('span', { class: 'mono link-id' }, shortAddress(id)),
   )
   row.append(
     el(

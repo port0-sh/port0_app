@@ -45,12 +45,22 @@ describe('shortHex', () => {
 })
 
 describe('shortAddress', () => {
-  it('trims long bech32 addresses', () => {
-    expect(shortAddress('mtst1qy3x7k9p2w8m5v6n4r2t8')).toBe('mtst1qy3x7…n4r2t8')
+  it('takes the fragment before the routing suffix of a bech32 address', () => {
+    // Both of these are Mico and Zaza faucets: their prefixes and suffixes match.
+    expect(shortAddress('mtst1aq80tyvprm8zc5fr0xfxuv46yvmfxrem_qr7qqq9wr6w')).toBe('…mfxrem')
+    expect(shortAddress('mtst1az5hm04mhc8wjyf0zmugqmmx6upczkm9_qr7qqq9wr6w')).toBe('…pczkm9')
+  })
+
+  it('takes the leading bytes of a hex id', () => {
+    expect(shortAddress('0x0ef591811ece2c512379926e32ba23')).toBe('0x0ef591…')
   })
 
   it('leaves short values whole', () => {
     expect(shortAddress('0xabcd')).toBe('0xabcd')
+  })
+
+  it('handles an empty value', () => {
+    expect(shortAddress('')).toBe('')
   })
 })
 

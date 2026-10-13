@@ -620,6 +620,15 @@ dialog.modal::backdrop {
   background: rgb(0 0 0 / 80%);
 }
 
+/*
+ * The body is whatever the caller passed; the Close row is added after it. Both
+ * mint and send end with a submit button, so the row needs its own space rather
+ * than sitting flush against it.
+ */
+.modal .form-actions {
+  margin-top: 1em;
+}
+
 .wallet-list {
   display: flex;
   flex-direction: column;

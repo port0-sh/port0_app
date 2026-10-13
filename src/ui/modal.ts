@@ -34,6 +34,22 @@ export function openModal(
     onClose?.()
   }
 
+  // A click outside the dialog's box closes it.
+  //
+  // The backdrop belongs to the dialog element itself, so checking the event
+  // target is not enough: a click on the dialog's own padding would close it and
+  // a click on the backdrop would not. The coordinates are compared against the
+  // box instead, which treats padding and backdrop alike.
+  dialog.addEventListener('click', (event) => {
+    const box = dialog.getBoundingClientRect()
+    const outside =
+      event.clientX < box.left ||
+      event.clientX > box.right ||
+      event.clientY < box.top ||
+      event.clientY > box.bottom
+    if (outside) close()
+  })
+
   dialog.addEventListener('cancel', (event) => {
     event.preventDefault()
     close()

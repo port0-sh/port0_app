@@ -8,7 +8,7 @@
  */
 
 import { getClient, getPublicAccount, sdkModule } from '../lib/client'
-import { formatAmount } from '../lib/format'
+import { formatAmount, shortAddress } from '../lib/format'
 import { requestAssets, walletStore } from '../wallet/wallet'
 
 export interface TokenPicker {
@@ -20,18 +20,6 @@ export interface TokenPicker {
 const EMPTY_LABEL = 'No tokens found in this wallet'
 /** The one option shown before a wallet is connected. */
 const LOGIN_LABEL = 'Login to load your tokens'
-
-/**
- * The first six hex characters of an id.
- *
- * The trailing characters of a Miden account id encode the account type and
- * routing parameters, so every faucet ends in the same few digits and the tail
- * cannot tell two of them apart. The head can.
- */
-function shortId(id: string): string {
-  const hex = id.startsWith('0x') ? id.slice(2) : id
-  return hex.length <= 6 ? `0x${hex}` : `0x${hex.slice(0, 6)}…`
-}
 
 /**
  * Faucet metadata, cached by faucet id.
@@ -137,10 +125,8 @@ export function mountTokenPicker(selectId: string): TokenPicker {
     }
 
     const { BasicFungibleFaucetComponent } = await sdkModule()
-    // Named tokens first: a row without a symbol and without a scaled amount is
-    // the least useful thing to meet at the top of the list.
-    const named: { id: string; label: string }[] = []
-    const unnamed: { id: string; label: string }[] = []
+    const options: { id: string; label: string }[] = []
+    let skipped = 0
     for (const asset of assets) {
       // Failures are not cached: a locked or unsynced wallet can answer on the
       // next populate, and only successes are worth remembering.
@@ -151,10 +137,10 @@ export function mountTokenPicker(selectId: string): TokenPicker {
       }
 
       if (!meta) {
-        // Still listed: the wallet holds it, and the pool can be created from it.
-        // The amount is left out rather than shown in base units, which for a
-        // six-decimal token reads as a number a hundred thousand times too big.
-        unnamed.push({ id: asset.faucetId, label: `Unknown token (${shortId(asset.faucetId)})` })
+        // Not a plain fungible faucet. An LP token is issued by the pool account
+        // itself, its metadata does not read as one, and no pool can be created
+        // from it, so it is left out rather than listed as unknown.
+        skipped += 1
         continue
       }
 
@@ -164,12 +150,18 @@ export function mountTokenPicker(selectId: string): TokenPicker {
       } catch {
         // The wallet reported something that is not a whole amount.
       }
-      named.push({
+      options.push({
         id: asset.faucetId,
-        label: `${meta.symbol} (${shortId(asset.faucetId)}) · ${balance}`,
+        label: `${meta.symbol} (${shortAddress(asset.faucetId)}) · ${balance}`,
       })
     }
-    fill([...named, ...unnamed])
+    if (options.length === 0 && skipped > 0) {
+      // Every asset was skipped. Usually that means the wallet holds nothing but
+      // LP tokens, but it is also what a failed faucet read looks like, so it is
+      // worth one line rather than silence.
+      console.warn(`no poolable token among ${skipped} wallet asset(s)`)
+    }
+    fill(options)
   }
 
   void populate()
@@ -180,7 +172,7 @@ export function mountTokenPicker(selectId: string): TokenPicker {
   const setValue = (hex: string): void => {
     if (!hex) return
     if (![...select.options].some((option) => option.value === hex)) {
-      select.append(new Option(shortId(hex), hex))
+      select.append(new Option(shortAddress(hex), hex))
     }
     select.value = hex
   }

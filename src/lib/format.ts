@@ -38,8 +38,15 @@ export function shortHex(value: string, head = 6, tail = 4): string {
 /** Trims a hex or bech32 address for display. */
 export function shortAddress(value: string): string {
   const s = value.trim()
-  if (s.length <= 20) return s
-  return `${s.slice(0, 10)}…${s.slice(-6)}`
+  if (s.length === 0) return s
+  // A bech32 address is `mtst1a` + hash + `_` + routing suffix. The prefix and
+  // the suffix are identical for every account of a kind, so the characters
+  // that tell two apart are the ones immediately before the underscore.
+  const routing = s.indexOf('_')
+  if (routing > 0) return `…${s.slice(0, routing).slice(-6)}`
+  // A hex id is prefix felt first, and its distinct bytes lead.
+  if (s.startsWith('0x')) return s.length <= 8 ? s : `0x${s.slice(2, 8)}…`
+  return s.length <= 12 ? s : `${s.slice(0, 6)}…${s.slice(-4)}`
 }
 
 /**
