@@ -72,3 +72,29 @@ export async function getPublicAccount(
   // bech32), and strings cross the worker boundary safely.
   return (await getClient()).accounts.getOrImport(ref)
 }
+
+/**
+ * Fetches a public account from the chain, overwriting the stored copy.
+ *
+ * `getOrImport` returns whatever the local store holds, which can lag the chain
+ * until a sync applies the update. `import` re-fetches by id, so a quote built
+ * from the result uses the same state the page displays.
+ */
+export async function getFreshAccount(
+  accountId: string | AccountId,
+): Promise<Account> {
+  const ref =
+    typeof accountId === 'string'
+      ? isHexId(accountId)
+        ? withHexPrefix(accountId.trim())
+        : accountId.trim()
+      : accountId.toString()
+  const client = await getClient()
+  try {
+    return await client.accounts.import(ref)
+  } catch {
+    // An account the store already tracks can reject the import; the stored
+    // copy is then the best available.
+    return await client.accounts.getOrImport(ref)
+  }
+}

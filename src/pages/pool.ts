@@ -13,6 +13,7 @@ import type { Pool, PoolConfig, PoolState } from '@port0.sh/sdk'
 import type { AccountId } from '@miden-sdk/miden-sdk'
 import {
   getClient,
+  getFreshAccount,
   getXyk,
   sdkModule,
   xykModule,
@@ -75,6 +76,8 @@ const statFee = qs<HTMLElement>(document, '#stat-fee')
 const statVolume = qs<HTMLElement>(document, '#stat-volume')
 const statApr = qs<HTMLElement>(document, '#stat-apr')
 const poolLinks = qs<HTMLElement>(document, '#pool-links')
+const poolReserves = qs<HTMLElement>(document, '#pool-reserves')
+const poolLinksRow = qs<HTMLElement>(document, '#pool-links-row')
 
 const swapForm = qs<HTMLFormElement>(document, '#swap-form')
 const swapSide = qs<HTMLSelectElement>(document, '#swap-side')
@@ -239,6 +242,9 @@ async function boot(): Promise<void> {
   await refreshBalances()
   window.setInterval(() => {
     void refreshRecord().then(() => loadHistory())
+    // Retry the chain read on the same cadence: a transient sync failure keeps
+    // the last state, and the next tick recovers without a reload.
+    void loadState()
   }, HISTORY_REFRESH_MS)
 }
 
@@ -247,28 +253,45 @@ function showPoolError(message: string): void {
   setText(poolError, message)
 }
 
+/**
+ * Serializes chain reads. The WASM client is single-threaded, and two syncs in
+ * flight throw; a post-action poll and a form submit can otherwise overlap.
+ */
+let chainReadQueue: Promise<unknown> = Promise.resolve()
+function chainRead<T>(work: () => Promise<T>): Promise<T> {
+  const run = chainReadQueue.then(work)
+  chainReadQueue = run.catch(() => undefined)
+  return run
+}
+
 async function loadState(): Promise<void> {
   if (!poolIdHex) return
-  try {
-    const [{ decodePoolState }, { AccountId }, client] = await Promise.all([
-      xykModule(),
-      sdkModule(),
-      getClient(),
-    ])
-    // Sync first: the local store is a cache of chain state.
-    await client.syncChain()
-    const account = await client.accounts.getOrImport(
-      AccountId.fromHex(withHexPrefix(poolIdHex)),
-    )
-    currentState = decodePoolState(account)
-    populateSwapSide()
-    await recomputeQuotes()
-    renderSummary()
-  } catch (error) {
-    // The detail is for the console; the page states the effect, not the cause.
-    console.error('pool state read failed', error)
-    showPoolError('Pool state is unavailable right now. Reload to try again.')
-  }
+  await chainRead(async () => {
+    try {
+      const [{ decodePoolState }, { AccountId }, client] = await Promise.all([
+        xykModule(),
+        sdkModule(),
+        getClient(),
+      ])
+      // Sync first: the local store is a cache of chain state.
+      await client.syncChain()
+      // Force a chain fetch: the stored copy can lag, and the SDK's own
+      // quote reads the store. Both must see the same account.
+      const account = await getFreshAccount(AccountId.fromHex(withHexPrefix(poolIdHex)))
+      currentState = decodePoolState(account)
+      poolError.hidden = true
+      populateSwapSide()
+      await recomputeQuotes()
+      renderSummary()
+    } catch (error) {
+      // The detail is for the console; the page states the effect, not the cause.
+      // A transient sync failure must not hide the state the page already has.
+      console.error('pool state read failed', error)
+      if (!currentState) {
+        showPoolError('Pool state is unavailable right now. Reload to try again.')
+      }
+    }
+  })
 }
 
 function renderSummary(): void {
@@ -284,6 +307,7 @@ function renderSummary(): void {
     `LPs keep ${split.lpKeeps}`
   const price = priceToken0InToken1(state)
   renderPriceNow(price)
+  renderReserves()
   // The tab names the pool, not the site, once the pool's own price is known.
   // Until then the page keeps the static title.
   document.title = poolPageTitle(
@@ -349,6 +373,7 @@ function renderPoolStats(): void {
       `${compactAmount(BigInt(pool.volume_24h_1), view.token1Decimals)} ${view.token1Symbol}`,
     ),
   )
+  renderReserves()
 }
 
 /** The bech32 form of an account id, which is what an explorer link takes. */
@@ -438,13 +463,28 @@ async function renderLinks(): Promise<void> {
     explorerAccountUrl(CONFIG.explorerUrl, await bech32(record.token0FaucetId)),
     explorerAccountUrl(CONFIG.explorerUrl, await bech32(record.token1FaucetId)),
   ])
-  for (const row of poolLinks.querySelectorAll('.link-row')) row.remove()
-  poolLinks.append(
+  for (const row of poolLinksRow.querySelectorAll('.link-row')) row.remove()
+  poolLinksRow.append(
     linkRow('Pool', poolIdHex, poolUrl),
     linkRow(record.token0Symbol, record.token0FaucetId, token0Url),
     linkRow(record.token1Symbol, record.token1FaucetId, token1Url),
   )
   poolLinks.hidden = false
+}
+
+/** The pool's reserves, from the chain state when it has landed, else the indexer. */
+function renderReserves(): void {
+  if (!record) return
+  const reserve0 =
+    currentState?.reserve0 ?? (indexedPool ? BigInt(indexedPool.reserve0) : null)
+  const reserve1 =
+    currentState?.reserve1 ?? (indexedPool ? BigInt(indexedPool.reserve1) : null)
+  if (reserve0 === null || reserve1 === null) return
+  setText(
+    poolReserves,
+    `Reserves: ${formatAmount(reserve0, record.token0Decimals)} ${record.token0Symbol} · ` +
+      `${formatAmount(reserve1, record.token1Decimals)} ${record.token1Symbol}`,
+  )
 }
 
 /** Re-reads the pool metadata from the indexer; keeps the last view on error. */
@@ -614,18 +654,31 @@ function renderHistoryTable(samples: IndexerSnapshot[]): void {
 /**
  * Price of 1 token0 in token1, computed with the contract's own formula at
  * zero fees: amountOut(10^d0, r0, r1, 0, 0). Returns null on an empty pool.
+ *
+ * The contract formula floors to zero when the price is below one base unit, so
+ * the scaled ratio is the fallback; without it a deep pool's headline would
+ * throw and take the whole chain read with it.
  */
 function priceToken0InToken1(state: PoolState): string | null {
   if (!record || state.reserve0 === 0n || state.reserve1 === 0n) return null
-  const raw = currentQuoteModule()?.amountOut(
-    10n ** BigInt(record.token0Decimals),
-    state.reserve0,
-    state.reserve1,
-    0n,
-    0n,
+  try {
+    const raw = currentQuoteModule()?.amountOut(
+      10n ** BigInt(record.token0Decimals),
+      state.reserve0,
+      state.reserve1,
+      0n,
+      0n,
+    )
+    if (raw) return trimFraction(formatAmount(raw.amountOut, record.token1Decimals))
+  } catch {
+    // Below one base unit; the scaled ratio keeps it visible.
+  }
+  const scaled = priceScaled(
+    { reserve0: state.reserve0.toString(), reserve1: state.reserve1.toString() },
+    record.token0Decimals,
+    record.token1Decimals,
   )
-  if (!raw) return null
-  return trimFraction(formatAmount(raw.amountOut, record.token1Decimals))
+  return scaled === null ? null : formatScaled(scaled)
 }
 
 /** The port0 module, if already loaded. Null when quotes have never run. */
@@ -643,11 +696,17 @@ function trimFraction(value: string, maxFractionDigits = 6): string {
 
 function populateSwapSide(): void {
   if (!currentState || !record) return
+  // Rebuilding the options would reset the browser's selection to the first
+  // side on every state refresh, including the poll after a confirmed swap.
+  const selected = swapSide.value
   clear(swapSide)
   swapSide.append(
     el('option', { value: currentState.token0FaucetId.toString() }, record.token0Symbol),
     el('option', { value: currentState.token1FaucetId.toString() }, record.token1Symbol),
   )
+  if (selected && swapSide.querySelector(`option[value="${selected}"]`)) {
+    swapSide.value = selected
+  }
 }
 
 /* Tabs: hash-based, no client-side router. */
@@ -918,8 +977,36 @@ function renderSwapQuote(): void {
     }
     swapQuote.append(...lines)
   } catch (error) {
-    swapQuote.append(quoteError(error instanceof Error ? error.message : String(error)))
+    const message = error instanceof Error ? error.message : String(error)
+    if (/amount out is zero/i.test(message)) {
+      const minIn = minInputForOneOut(reserveIn, reserveOut, state.fees.lpFeeBps)
+      swapQuote.append(
+        quoteError(
+          `Amount out rounds to zero at this pool's ratio. The smallest swap that pays 1 base unit is about ${formatAmount(minIn, decimalsIn)} ${symbolIn}.`,
+        ),
+      )
+    } else {
+      swapQuote.append(quoteError(message))
+    }
   }
+}
+
+/**
+ * Smallest input whose swap pays at least one base unit of output.
+ *
+ * Solves `in_with_fee * out / (reserve_in * 10000 + in_with_fee) >= 1` for the
+ * input, with `in_with_fee = in * (10000 - lp_fee_bps)`. Zero when the pool is
+ * too shallow for any amount to pay a base unit.
+ */
+function minInputForOneOut(
+  reserveIn: bigint,
+  reserveOut: bigint,
+  lpFeeBps: bigint,
+): bigint {
+  if (reserveOut <= 1n || lpFeeBps >= 10_000n) return 0n
+  const numerator = reserveIn * 10_000n
+  const denominator = (reserveOut - 1n) * (10_000n - lpFeeBps)
+  return (numerator + denominator - 1n) / denominator
 }
 
 function renderAddQuote(): void {
@@ -947,6 +1034,15 @@ function renderAddQuote(): void {
       el('p', {}, `LP you receive: ${quote.liquidityToUser.toString()}`),
       el('p', {}, `Minimum LP (slippage ${slippageBps} bps): ${minLp.toString()}`),
     ]
+    if (state.lpSupply === 0n) {
+      lines.push(
+        el(
+          'p',
+          { class: 'muted' },
+          'This is the first deposit, so it sets the pool price. A very imbalanced deposit makes small swaps round to zero.',
+        ),
+      )
+    }
     if (quote.refund0 > 0n) {
       lines.push(el('p', {}, `Refund: ${formatAmount(quote.refund0, record.token0Decimals)} ${record.token0Symbol}`))
     }
@@ -1071,19 +1167,19 @@ async function poolHandle(): Promise<Pool> {
  * the sync and the submit widens the window in which a block can land and put
  * the two blocks one apart. Fetch the account first, then sync, then build.
  */
-async function refreshBeforeAction(): Promise<PoolState> {
-  const [{ decodePoolState }, { AccountId }, client] = await Promise.all([
-    xykModule(),
-    sdkModule(),
-    getClient(),
-  ])
-  const account = await client.accounts.getOrImport(
-    AccountId.fromHex(withHexPrefix(poolIdHex as string)),
-  )
-  await client.syncChain()
-  currentState = decodePoolState(account)
-  renderSummary()
-  return currentState
+function refreshBeforeAction(): Promise<PoolState> {
+  return chainRead(async () => {
+    const [{ decodePoolState }, { AccountId }, client] = await Promise.all([
+      xykModule(),
+      sdkModule(),
+      getClient(),
+    ])
+    const account = await getFreshAccount(AccountId.fromHex(withHexPrefix(poolIdHex as string)))
+    await client.syncChain()
+    currentState = decodePoolState(account)
+    renderSummary()
+    return currentState
+  })
 }
 
 async function doSwap(): Promise<void> {

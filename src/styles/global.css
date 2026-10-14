@@ -337,8 +337,16 @@ a:active {
   margin: 1rem 0 0;
 }
 
-.pool-links-head {
+.pool-reserves {
   margin: 0 0 0.35rem;
+}
+
+/* The three linked accounts sit on one line and wrap; they stack on mobile. */
+.pool-links-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1.25rem;
 }
 
 /*
@@ -347,7 +355,7 @@ a:active {
  * need no font.
  */
 .link-row {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 0.75rem;
   padding: 0.15rem 0;
@@ -988,6 +996,13 @@ html[data-notice='dismissed'] #testnet-notice {
 @media (max-width: 700px) {
   .hide-sm {
     display: none;
+  }
+
+  /* The linked accounts stack on narrow screens. */
+  .pool-links-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
   }
 }
 

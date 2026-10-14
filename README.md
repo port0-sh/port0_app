@@ -65,7 +65,7 @@ Environment variables are read at build time (`import.meta.env`):
 | `VITE_CHAIN_FEE_FAUCET_ID`     | `0x4cbdcaffe75f0a317482224dae6436` | Faucet of the chain's fee asset (0.17 testnet protocol configuration) |
 | `VITE_PROTOCOL_FEE_RECIPIENT`  | (empty)                        | Platform fee recipient, displayed and required for creation; the on-chain destination lives in the registry |
 | `VITE_REGISTRY_ID`             | (empty)                        | On-chain pool registry account; empty skips registration |
-| `VITE_REGISTRY_REGISTER_FEE`   | `0`                            | Register note consumption fee, in the registry's fee asset |
+| `VITE_REGISTRY_REGISTER_FEE`   | `210`                          | Register note consumption fee, in the registry's fee asset; the protocol maximum, so the sponsorship always covers the actual transaction fee |
 | `VITE_INDEXER_URL`             | (empty)                        | Indexer base URL; empty disables browsing and the pool page |
 | `VITE_PARA_API_KEY`            | (empty)                        | Para API key; empty keeps the Para option disabled |
 | `VITE_PARA_ENVIRONMENT`        | `BETA`                         | Para environment; `PRODUCTION` for production builds |

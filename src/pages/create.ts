@@ -55,9 +55,17 @@ import {
 const NOTE_KINDS: readonly PoolNoteKind[] = ['mint', 'burn', 'swap', 'collect']
 
 /**
- * Measured 0.17 testnet fee per transaction: 133 base units (0.000133 USDCX).
- * Used for the pool's per-note-kind fee and the faucet funding note
- * (2 transactions: consume + mint).
+ * Protocol maximum transaction fee, in fee-asset base units: base fee 7 x
+ * (ilog2(MAX_TX_EXECUTION_CYCLES = 2^29) + 1) = 210. Every pool note kind is
+ * priced at this value, so the prepaid sponsorship always covers the actual
+ * transaction fee and a later collect sweeps the surplus.
+ */
+const NOTE_FEE_BASE_UNITS = 210n
+
+/**
+ * Measured 0.17 testnet fee for the deploy consume (a P2ID note): 133 base
+ * units, which covers it with a small surplus a later collect sweeps. Also the
+ * per-transaction unit for the faucet funding note (consume + mint).
  */
 const TX_FEE_BASE_UNITS = 133n
 
@@ -245,9 +253,9 @@ async function readParams(): Promise<PoolParams> {
   // On 0.17 the network-note fee faucet must be the chain's own, so it is
   // read from the client, not from user input.
   const feeFaucet = await (await getClient()).feeFaucetId()
-  // The per-note-kind fee is the measured transaction fee; not user-settable.
+  // Every note kind is priced at the protocol maximum; not user-settable.
   const noteFees: PoolNoteFees = Object.fromEntries(
-    NOTE_KINDS.map((kind) => [kind, TX_FEE_BASE_UNITS]),
+    NOTE_KINDS.map((kind) => [kind, NOTE_FEE_BASE_UNITS]),
   )
   const lpFeeBps = selectedFeeTierBps()
   const registryId = await parseAccountRef(CONFIG.registryId, 'Registry account id')
@@ -286,12 +294,7 @@ function showDeployError(message: string): void {
 }
 
 function renderFeeBreakdown(): void {
-  const tier = selectedFeeTierBps()
-  // Until the registry answers, state what is known: the LP fee.
-  const protocol = registryPolicy
-    ? `${formatBps(registryPolicy.protocolFeeShareBps)} to the protocol`
-    : 'protocol fee read from the registry'
-  setText(feeBreakdown, `Swap fee: ${formatBps(tier)} to LPs · ${protocol}.`)
+  setText(feeBreakdown, `LP fee tier: ${formatBps(selectedFeeTierBps())}`)
 }
 
 function renderGating(): void {
