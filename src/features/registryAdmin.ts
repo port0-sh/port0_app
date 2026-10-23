@@ -4,8 +4,9 @@
  * The registry accepts a fee change only from the admin account it was created
  * with, and only for the register note's own price. This panel reads both the
  * admin and the live fee from chain, refuses to submit when the connected wallet
- * is not the admin, and otherwise emits a registry-config note with the
- * sponsorship that pays its fee, then waits for the price on chain to change.
+ * is not the admin, and otherwise emits a registry-config note and waits for the
+ * price on chain to change. No sponsorship is attached: the registry prices that
+ * note at zero and pays its own fee.
  */
 
 import { CONFIG } from '../lib/config'
@@ -154,16 +155,14 @@ export function openRegistryAdmin(): void {
         registryId: id,
         registerFee: next,
       })
-      // The config note is priced at zero, so the registry pays its own
-      // transaction fee; the sponsorship below covers the wallet's emit.
-      const sponsor = sdk.buildFeeSponsorshipNote({
-        sender: wallet,
-        target: id,
-        featureNote: note,
-        feeFaucetId: AccountId.fromHex(CONFIG.chainFeeFaucetId),
-        feeAmount: sdk.NOTE_FEES['registry-config'] > 0n ? sdk.NOTE_FEES['registry-config'] : 210n,
-      })
-      const request = await sdk.outputNotesRequest(client, [note, sponsor], id)
+      // No sponsorship: the registry prices the config note at zero and pays its
+      // own transaction fee from the register fees it holds, which its collect
+      // hold leaves in place. A sponsorship here would donate that amount to the
+      // registry on every change.
+      //
+      // The wallet executes the request, so it takes the wallet variant, which
+      // declares the multisig auth-args preimage a guarded wallet reads.
+      const request = await sdk.ownOutputNotesRequest(client, [note], id)
       setStatus( 'Confirm the transaction in your wallet…')
       const txId = await submitViaWallet(request)
       setStatus( `Submitted ${shortHex(txId)}; waiting for the registry…`)

@@ -26,6 +26,7 @@ import type { Asset, InputNoteDetails } from '@miden-sdk/miden-wallet-adapter-ba
 import type { MidenWalletAdapter } from '@miden-sdk/miden-wallet-adapter-miden'
 import type { AccountId, TransactionRequest } from '@miden-sdk/miden-sdk'
 import { CONFIG } from '../lib/config'
+import { walletNetwork } from '../lib/network'
 import { createStore } from '../lib/state'
 
 export type WalletKind = 'bread' | 'para'
@@ -259,7 +260,7 @@ async function handshake(
         adapter
           .connect(
             PrivateDataPermission.Auto,
-            WalletAdapterNetwork.Testnet,
+            walletNetwork() as unknown as WalletAdapterNetwork,
             AllowedPrivateData.Assets | AllowedPrivateData.Notes,
           )
           .then(() => undefined),

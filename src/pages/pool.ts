@@ -20,6 +20,7 @@ import {
   type XykModule,
 } from '../lib/client'
 import { CONFIG } from '../lib/config'
+import { chainNetworkId } from '../lib/network'
 import { clear, el, qs, setText } from '../lib/dom'
 import {
   compactAmount,
@@ -370,9 +371,9 @@ function renderPoolStats(): void {
 
 /** The bech32 form of an account id, which is what an explorer link takes. */
 async function bech32(id: string): Promise<string> {
-  const { AccountId, AccountInterface, NetworkId } = await sdkModule()
+  const { AccountId, AccountInterface } = await sdkModule()
   return AccountId.fromHex(withHexPrefix(id)).toBech32(
-    NetworkId.testnet(),
+    await chainNetworkId(),
     AccountInterface.BasicWallet,
   )
 }

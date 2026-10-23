@@ -9,8 +9,8 @@
  * that differ from it.
  */
 
-/** Networks the app can be built against. */
-export type NetworkName = 'testnet' | 'mainnet'
+/** Networks the app can be built against, plus any custom chain by name. */
+export type NetworkName = 'testnet' | 'devnet' | 'localnet' | 'mainnet'
 
 /**
  * Per-network protocol values.
@@ -21,22 +21,51 @@ export type NetworkName = 'testnet' | 'mainnet'
  * same shapes as their testnet counterparts. A proof and a note delivery
  * confirm the last two.
  */
-const NETWORKS: Record<
-  NetworkName,
-  {
-    rpcUrl: string
-    chainFeeFaucetId: string
-    proverUrl: string
-    noteTransportUrl: string
-    explorerUrl: string
-  }
-> = {
+interface NetworkDefaults {
+  rpcUrl: string
+  chainFeeFaucetId: string
+  proverUrl: string
+  noteTransportUrl: string
+  explorerUrl: string
+  /**
+   * The chain's own network id, which decides an address's bech32 prefix. A
+   * chain with its own prefix uses `custom`, and the prefix itself.
+   */
+  chainId: 'testnet' | 'devnet' | 'mainnet' | 'custom'
+  /** Prefix used when `chainId` is `custom`. */
+  chainPrefix?: string
+  /** True when real funds are at stake: gates the blocking risk notice. */
+  realFunds: boolean
+}
+
+const NETWORKS: Record<NetworkName, NetworkDefaults> = {
   testnet: {
     rpcUrl: 'https://rpc.testnet.miden.io',
     chainFeeFaucetId: '0x4cbdcaffe75f0a317482224dae6436',
     proverUrl: 'testnet',
     noteTransportUrl: 'testnet',
     explorerUrl: 'https://testnet.midenscan.com/account',
+    chainId: 'testnet',
+    realFunds: false,
+  },
+  devnet: {
+    rpcUrl: 'https://rpc.devnet.miden.io',
+    chainFeeFaucetId: '',
+    proverUrl: 'devnet',
+    noteTransportUrl: 'devnet',
+    explorerUrl: 'https://explorer.devnet.miden.io/account',
+    chainId: 'devnet',
+    realFunds: false,
+  },
+  localnet: {
+    rpcUrl: 'http://localhost:57291',
+    chainFeeFaucetId: '',
+    proverUrl: 'local',
+    noteTransportUrl: 'local',
+    explorerUrl: '',
+    chainId: 'custom',
+    chainPrefix: 'mlcl',
+    realFunds: false,
   },
   mainnet: {
     rpcUrl: 'https://rpc.cedar.miden.io',
@@ -44,12 +73,24 @@ const NETWORKS: Record<
     proverUrl: 'https://tx-prover.cedar.miden.io',
     noteTransportUrl: 'https://transport.cedar.miden.io',
     explorerUrl: 'https://explorer.cedar.miden.io/account',
+    chainId: 'mainnet',
+    realFunds: true,
   },
 }
 
-/** Selected network. Anything other than `mainnet` resolves to testnet. */
-const NETWORK: NetworkName =
-  import.meta.env.VITE_NETWORK?.trim() === 'mainnet' ? 'mainnet' : 'testnet'
+/**
+ * Selected network, from `VITE_NETWORK`. An unrecognised value is a build error
+ * rather than a silent fallback: deploying a build that quietly talks to the
+ * wrong chain is worse than failing to build.
+ */
+const NETWORK: NetworkName = (() => {
+  const requested = (import.meta.env.VITE_NETWORK ?? 'testnet').trim().toLowerCase()
+  if (requested in NETWORKS) return requested as NetworkName
+  throw new Error(
+    `VITE_NETWORK="${requested}" is not a known network; expected one of ` +
+      `${Object.keys(NETWORKS).join(', ')}`,
+  )
+})()
 
 const DEFAULTS = NETWORKS[NETWORK]
 
@@ -59,8 +100,12 @@ export const CONFIG = {
   /** Network this build talks to. */
   network: NETWORK,
 
-  /** True on the partner mainnet: real funds, closed alpha, no reset. */
-  isMainnet: NETWORK === 'mainnet',
+  /** True when real funds are at stake: gates the blocking risk notice. */
+  realFunds: DEFAULTS.realFunds,
+
+  /** The chain's network id selector and its bech32 prefix when custom. */
+  chainId: DEFAULTS.chainId,
+  chainPrefix: DEFAULTS.chainPrefix,
 
   /**
    * Branding. The name, the text mark, and the slogan come from env vars rather

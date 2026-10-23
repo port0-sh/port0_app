@@ -1,4 +1,23 @@
 /**
+ * Measured 0.17 testnet fee for the deploy consume of a pool, in base units: a
+ * P2ID note that the pool consumes as its first transaction.
+ *
+ * Measured by `note_fee_benchmark` alongside the other paths. A pool sweeps any
+ * leftover into the protocol pot on its next collect, so the funding is exact.
+ */
+export const POOL_DEPLOY_FEE_BASE_UNITS = 133n
+
+/**
+ * Measured fee for the deploy consume of a network faucet, in base units.
+ *
+ * The same call shape as a pool deploy, but a lighter account: 25,239 cycles,
+ * priced at 112 base units. A faucet has no sweep, so it is funded with exactly
+ * this rather than with the pool's figure; the launch that follows is paid by the
+ * owner's sponsorship.
+ */
+export const FAUCET_DEPLOY_FEE_BASE_UNITS = 112n
+
+/**
  * Pool fee model.
  *
  * LP fee tiers follow Uniswap: 5, 30, and 100 basis points. The protocol fee

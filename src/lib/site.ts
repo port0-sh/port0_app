@@ -149,7 +149,7 @@ function mountNotice(): void {
   const dismiss = notice?.querySelector<HTMLButtonElement>('#notice-dismiss')
   dismiss?.addEventListener('click', acceptAlpha)
 
-  if (CONFIG.isMainnet && !alphaAccepted()) mountAlphaGate()
+  if (CONFIG.realFunds && !alphaAccepted()) mountAlphaGate()
 }
 
 /** Opens the mainnet acknowledgement modal. */

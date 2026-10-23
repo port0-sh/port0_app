@@ -1,18 +1,20 @@
 /**
- * Utility: one-time mint.
+ * Utility: launch a fixed-supply token.
  *
- * Creates a faucet whose whole supply is minted to the caller's wallet in one
- * transaction, with `maxSupply` equal to that supply, so nothing remains to mint
- * afterwards and no auth component is needed. It is the token-launch step from
- * the pool page, moved here because it is a general utility rather than part of
- * creating a pool.
+ * Creates a network faucet whose whole supply is minted once to the caller's
+ * wallet, with `maxSupply` equal to that supply and an immutable owner, so
+ * nothing remains to mint afterwards. It is the token-launch step from the pool
+ * page, moved here because it is a general utility rather than part of creating a
+ * pool.
  *
- * The six steps are forced by the chain: a faucet account must exist before it
- * can be funded, funding arrives as a note, and the note becomes the faucet's
- * first transaction, which is also the one that mints.
+ * The six steps are forced by the chain: the faucet account must exist before it
+ * can be funded, funding arrives as a note, that note is the faucet's first
+ * transaction, and the launch is a separate note the owner's wallet emits.
  */
 
 import { CONFIG } from '../lib/config'
+import { FAUCET_DEPLOY_FEE_BASE_UNITS } from '../lib/fees'
+import { chainNetworkId } from '../lib/network'
 import { el, setText } from '../lib/dom'
 import { shortHex } from '../lib/format'
 import {
@@ -37,12 +39,6 @@ import {
   waitForTransaction,
   walletAccountId,
 } from '../wallet/wallet'
-
-/** Measured per-transaction verification fee, in the chain fee asset. */
-const TX_FEE_BASE_UNITS = 133n
-
-/** The faucet's first transaction is paid from a note funded with this. */
-const FAUCET_FUNDING_AMOUNT = Number(TX_FEE_BASE_UNITS * 2n)
 
 export function openOneTimeMint(): void {
   const symbol = el('input', {
@@ -148,15 +144,20 @@ export function openOneTimeMint(): void {
       if (supplyError) throw new Error(supplyError)
       const total = parseInitialSupply(supply.value, digits)
 
-      const [{ NetworkId, AccountInterface }, client] = await Promise.all([
+      const [{ AccountInterface }, client, chainId] = await Promise.all([
         sdkModule(),
         getClient(),
+        chainNetworkId(),
       ])
 
       setText(status, 'Step 1/6: creating the faucet account')
       // A network account, so the faucet is exempt from any keyed-account
       // allowlist: launching a token needs no invitation code.
-      const { createNetworkFaucet, LAUNCH_FEE } = await xykModule()
+      const { createNetworkFaucet, LAUNCH_FEE, deployNetworkFaucet } = await xykModule()
+      // The faucet pays its own deploy transaction, measured at 112 base units;
+      // it has no sweep, so it is funded with exactly that. The launch is a
+      // separate transaction, paid by this wallet's sponsorship.
+      const funding = Number(FAUCET_DEPLOY_FEE_BASE_UNITS)
       const faucet = await createNetworkFaucet(client, {
         name,
         symbol: ticker,
@@ -170,9 +171,9 @@ export function openOneTimeMint(): void {
 
       // The client runs in a Web Worker with its own WASM instance, so every
       // call below takes the hex string rather than a main-thread handle.
-      const faucetAddress = faucet.id().toBech32(NetworkId.testnet(), AccountInterface.BasicWallet)
+      const faucetAddress = faucet.id().toBech32(chainId, AccountInterface.BasicWallet)
       setText(status, 'Step 2/6: asking the wallet to fund the faucet')
-      const sendTxId = await sendViaWallet(faucetAddress, CONFIG.chainFeeFaucetId, FAUCET_FUNDING_AMOUNT)
+      const sendTxId = await sendViaWallet(faucetAddress, CONFIG.chainFeeFaucetId, funding)
       setText(status, 'Step 3/6: waiting for the funding to confirm')
       await waitForTransaction(sendTxId)
 
@@ -182,16 +183,12 @@ export function openOneTimeMint(): void {
 
       setText(status, 'Step 5/6: consuming the note, which creates the faucet')
       await client.syncChain()
-      await client.transactions.consume({
-        account: faucetId,
-        notes: [noteId],
-        waitForConfirmation: true,
-      })
+      await deployNetworkFaucet(client, faucet.id(), noteId, { waitForConfirmation: true })
 
       setText(status, 'Step 6/6: launching the token')
       // The whole supply leaves in one note the owner's wallet can accept. The
       // faucet enforces the owner and the one-launch rule on chain.
-      const { buildLaunchNote, buildFeeSponsorshipNote, outputNotesRequest } = await xykModule()
+      const { buildLaunchNote, buildFeeSponsorshipNote, ownOutputNotesRequest } = await xykModule()
       const launch = buildLaunchNote({
         sender: wallet,
         faucetId: faucet.id(),
@@ -204,7 +201,10 @@ export function openOneTimeMint(): void {
         feeFaucetId: CONFIG.chainFeeFaucetId,
         feeAmount: LAUNCH_FEE,
       })
-      const request = await outputNotesRequest(client, [launch, sponsor], faucet.id())
+      // The wallet executes this request, so it takes the wallet variant: the
+      // client-signed one omits the multisig auth-args preimage a guarded wallet
+      // reads, and such a wallet aborts.
+      const request = await ownOutputNotesRequest(client, [launch, sponsor], faucet.id())
       const launchTx = await submitViaWallet(request)
       await waitForTransaction(launchTx)
 

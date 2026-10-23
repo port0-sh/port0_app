@@ -34,8 +34,9 @@ import {
   xykModule,
 } from '../lib/client'
 import { CONFIG } from '../lib/config'
+import { chainNetworkId } from '../lib/network'
 import { qs, setText } from '../lib/dom'
-import { DEFAULT_LP_FEE_BPS } from '../lib/fees'
+import { DEFAULT_LP_FEE_BPS, POOL_DEPLOY_FEE_BASE_UNITS } from '../lib/fees'
 import type { RegistryFeePolicy } from '@port0.sh/sdk'
 import { formatBps, isHexId, normalizeHex, shortHex, withHexPrefix } from '../lib/format'
 import { fetchPools } from '../lib/indexer'
@@ -55,17 +56,8 @@ import {
 
 const NOTE_KINDS: readonly PoolNoteKind[] = ['mint', 'burn', 'swap', 'collect']
 
-/**
- * Measured 0.17 testnet fee for the deploy consume (a P2ID note): 133 base
- * units, which covers it with a small surplus a later collect sweeps. Also the
- * per-transaction unit for the faucet funding note (consume + mint).
- */
-const TX_FEE_BASE_UNITS = 133n
-
-/** Funding the faucet covers two transactions: 2 × 133 = 266. */
-
-/** Funding the pool covers one transaction (the deploy consume): 133. */
-const POOL_FUNDING_AMOUNT = Number(TX_FEE_BASE_UNITS)
+/** Funding the pool covers one transaction (the deploy consume). */
+const POOL_FUNDING_AMOUNT = Number(POOL_DEPLOY_FEE_BASE_UNITS)
 
 mountWallet()
 mountSite()
@@ -373,10 +365,11 @@ async function run(): Promise<void> {
       flowStage = 'account'
     }
     const { admin, params, token0Meta, token1Meta } = flow
-    const [{ NetworkId, AccountInterface }, client, xyk] = await Promise.all([
+    const [{ AccountInterface }, client, xyk, chainId] = await Promise.all([
       sdkModule(),
       getClient(),
       getXyk(),
+      chainNetworkId(),
     ])
 
     // Stage: local pool account.
@@ -423,7 +416,7 @@ async function run(): Promise<void> {
       }
       if (!poolNoteId) {
         const poolAddress = poolId.toBech32(
-          NetworkId.testnet(),
+          chainId,
           AccountInterface.BasicWallet,
         )
         setStep(stepDeploy, 'active', 'requesting pool funding from wallet…')
