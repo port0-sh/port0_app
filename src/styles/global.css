@@ -177,6 +177,11 @@ a:active {
     justify-self: end;
   }
 
+  .header-tools {
+    grid-area: wallet;
+    justify-self: end;
+  }
+
   .nav {
     grid-area: nav;
     justify-self: start;
@@ -488,6 +493,7 @@ button:disabled {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  position: relative;
 }
 
 .token-picker select,
@@ -686,6 +692,9 @@ dialog.modal::backdrop {
 }
 
 .toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 1ch;
   border: 1px solid var(--green);
   background-color: var(--black);
   color: var(--white);
@@ -695,6 +704,87 @@ dialog.modal::backdrop {
 .toast.error {
   border-color: var(--error);
   color: var(--error);
+}
+
+/* Submission status: a swap, add, remove, or deploy step in flight. Black on
+   the coloured panels, matching a toast, so the step is readable while the
+   wallet window is in front. An empty status takes no space. */
+.flow-status {
+  display: block;
+  max-width: 100%;
+  padding: 0.35rem 1.25ch;
+  border: 1px solid var(--green);
+  background-color: var(--black);
+  color: var(--white);
+}
+
+.flow-status:empty {
+  display: none;
+}
+
+/* Swap progress: the path reads like the quote's Route row, and the hop the
+   wallet is prompting for is bold. The receipt stays after the bell. */
+.route-path {
+  margin: 0;
+  color: var(--white);
+}
+
+.route-hop-active {
+  font-weight: 700;
+  color: var(--green);
+}
+
+.flow-message {
+  margin: 0.25rem 0 0;
+  color: var(--light-grey);
+}
+
+.receipt-head {
+  margin: 0;
+  color: var(--white);
+  font-weight: 700;
+}
+
+/* Receipt rows: label at the left, value at the right, tight line box. */
+.receipt {
+  margin: 0.2rem 0 0;
+  font-size: 0.9em;
+}
+
+.receipt p {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.1rem 0;
+}
+
+.receipt-foot {
+  margin: 0.25rem 0 0;
+  font-size: 0.85em;
+  color: var(--light-grey);
+}
+
+/* The wallet and the sound button share one header cell. */
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sound-toggle {
+  flex: none;
+  padding: 0.35em 0.7em;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.toast-close {
+  flex: none;
+  padding: 0 0.75ch;
+  border-color: var(--error);
+  color: var(--error);
+  line-height: 1.2;
 }
 
 /* Loading pulse */
@@ -866,14 +956,15 @@ dialog.modal::backdrop {
 }
 
 /*
- * The testnet notice: a full-width bar above the header, not a gate. It is part
- * of the markup, so it reads without JavaScript, and the inline script in each
- * page's head sets `data-notice="dismissed"` before the first paint once it has
- * been dismissed, so a returning reader never sees it. The tint is the darkest
- * green in the palette: enough to separate the bar from the page, not enough to
- * read as an alert.
+ * The alpha notice: a full-width bar above the header. It is part of the
+ * markup, so it reads without JavaScript. On testnet it is dismissible and the
+ * inline script in each page's head sets `data-notice="dismissed"` before the
+ * first paint once it has been dismissed. On mainnet it is permanent, its text
+ * is the mainnet paragraph, and the first visit is gated by `dialog.alpha-gate`.
+ * The tint is the darkest green in the palette: enough to separate the bar from
+ * the page, not enough to read as an alert.
  */
-#testnet-notice {
+#alpha-notice {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -888,13 +979,35 @@ dialog.modal::backdrop {
   font-size: 0.85em;
 }
 
-#testnet-notice p {
+#alpha-notice p {
   margin: 0;
   max-width: 74ch;
 }
 
-html[data-notice='dismissed'] #testnet-notice {
+/* One paragraph per network; the head script sets `data-network`. */
+html[data-network='testnet'] [data-network-text='mainnet'],
+html[data-network='mainnet'] [data-network-text='testnet'] {
   display: none;
+}
+
+/* Testnet hides the bar once dismissed; mainnet keeps it. */
+html[data-network='testnet'][data-notice='dismissed'] #alpha-notice {
+  display: none;
+}
+
+/* Mainnet has no dismiss button. */
+html[data-network='mainnet'] #notice-dismiss {
+  display: none;
+}
+
+/* The mainnet acknowledgement gate. */
+dialog.alpha-gate ul {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+dialog.alpha-gate li {
+  margin: 0.25em 0;
 }
 
 /* The one call to action, centred under the name. */
@@ -1012,6 +1125,13 @@ html[data-notice='dismissed'] #testnet-notice {
   position: relative;
 }
 
+/* The wallet region is a column so the error line sits under the control. */
+#wallet {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .account-btn {
   display: inline-flex;
   align-items: center;
@@ -1041,6 +1161,12 @@ html[data-notice='dismissed'] #testnet-notice {
   background-color: var(--black);
   padding: 0.5rem 0;
   box-shadow: 0 8px 24px rgb(0 0 0 / 60%);
+}
+
+/* No room below: the menu opens above the trigger instead. */
+.account.menu-up .menu {
+  top: auto;
+  bottom: calc(100% + 0.5rem);
 }
 
 .menu-label {
@@ -1158,4 +1284,376 @@ html[data-notice='dismissed'] #testnet-notice {
 .pool-table .row-link:focus-visible {
   outline: 1px solid var(--green);
   outline-offset: -1px;
+}
+
+/*
+ * Desktop header: the swap card and the protocol stats share the width, both
+ * left-aligned with the table below, so the card is no longer a centred island.
+ */
+/* Two thirds swap, one third stats. The swap card sets the row height and is
+   never clipped; the stats column is subservient and scrolls inside it. */
+.swap-hero {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+  margin-bottom: 1.5rem;
+}
+
+.swap-hero > * {
+  min-height: 0;
+}
+
+.swap-hero .swap-card {
+  max-width: none;
+  margin: 0;
+  background-color: var(--darkest-green);
+}
+
+.stats-panel {
+  overflow-y: auto;
+}
+
+.protocol-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.9rem;
+}
+
+.protocol-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.protocol-label {
+  font-size: 0.8em;
+}
+
+.protocol-figure {
+  font-size: 1.5em;
+  color: var(--white);
+}
+
+.protocol-foot {
+  margin: 1.25rem 0 0;
+  font-size: 0.8em;
+}
+
+@media (max-width: 900px) {
+  .swap-hero {
+    grid-template-columns: 1fr;
+  }
+
+  /* Stacked: each panel takes its natural height, no inner scroll. */
+  .stats-panel {
+    overflow-y: visible;
+  }
+}
+
+/*
+ * Swap card on small screens: the token select wraps below the amount instead
+ * of shrinking into it, so the number field is never covered.
+ */
+
+/*
+ * Swap card: the standard two-field layout. A pay field and a receive field,
+ * each an amount input with a token button, a flip control between them, an
+ * optional settings row for slippage, and a details roster under the fields.
+ */
+.swap-card {
+  max-width: 480px;
+  margin-inline: auto;
+}
+
+.swap-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.swap-head h2 {
+  margin: 0;
+}
+
+.swap-icon {
+  padding: 0.25em 0.9ch;
+  line-height: 1.4;
+}
+
+.swap-settings {
+  border: 1px solid var(--dark-grey);
+  padding: 0.75rem 1ch;
+  margin-top: 0.75rem;
+}
+
+.swap-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.swap-slippage-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5ch;
+}
+
+.swap-slippage-input input {
+  width: 8ch;
+  text-align: right;
+}
+
+.swap-settings p {
+  margin: 0.5rem 0 0;
+  font-size: 0.85em;
+}
+
+.swap-field {
+  border: 1px solid var(--dark-grey);
+  background-color: var(--black);
+  padding: 0.75rem 1ch;
+}
+
+/* Full-opacity secondary text inside the card: light grey on black is ~9:1. */
+.swap-card .muted {
+  opacity: 1;
+}
+
+.swap-field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.85em;
+}
+
+.swap-field-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75ch;
+}
+
+/* Balance on the left, percent shortcuts on the right, under the pay field. */
+.swap-field-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.4rem 0 0.75rem;
+  padding-inline: 1ch;
+  font-size: 0.85em;
+}
+
+.swap-percents {
+  display: inline-flex;
+  gap: 0.25rem;
+}
+
+.swap-percent {
+  padding: 0.1em 0.7ch;
+  font-size: 0.95em;
+}
+
+.swap-amount {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  color: var(--white);
+  font: inherit;
+  font-size: 1.5em;
+  padding: 0.25em 0;
+}
+
+.swap-amount:focus {
+  outline: none;
+}
+
+.swap-flip-row {
+  display: flex;
+  justify-content: center;
+  margin: -0.75rem 0;
+  position: relative;
+  z-index: 1;
+}
+
+.swap-hidden-select {
+  display: none;
+}
+
+.swap-details {
+  margin-top: 0.75rem;
+  font-size: 0.9em;
+}
+
+.swap-details p {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.3rem 0;
+}
+
+.swap-actions {
+  flex-direction: column;
+  align-items: stretch;
+  margin-top: 0.75rem;
+}
+
+.swap-submit {
+  width: 100%;
+}
+
+/* Token autocomplete: a text input over the hidden select, with a dropdown of
+   symbol/id matches. */
+/* The wrapper is exactly as wide as the input, so the list arrow sits on the
+   input's right edge and not on the edge of a stretched grid cell. */
+.token-combo {
+  position: relative;
+  width: fit-content;
+}
+
+.token-combo-input {
+  width: 16ch;
+  text-align: right;
+  border: 1px solid var(--dark-grey);
+  background-color: var(--black);
+  color: var(--white);
+  font: inherit;
+  padding: 0.35em 2.6ch 0.35em 0.8ch;
+}
+
+/* Signals that the field opens a list; spins while the list loads. */
+.token-combo-icon {
+  position: absolute;
+  right: 0.6ch;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--light-grey);
+  pointer-events: none;
+  font-size: 0.9em;
+}
+
+
+
+.token-combo-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 2px);
+  z-index: 30;
+  min-width: 26ch;
+  max-height: 30vh;
+  overflow-y: auto;
+  background-color: var(--black);
+  border: 1px solid var(--dark-grey);
+}
+
+.token-combo-option {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.35em 1ch;
+  border: none;
+  background: transparent;
+  color: var(--white);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.token-combo-option.active,
+.token-combo-option:hover {
+  background-color: var(--darkest-green);
+}
+
+/* Symbol over its faucet id, with the wallet balance on the right. */
+.token-combo-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+}
+
+.token-combo-symbol {
+  color: var(--white);
+}
+
+.token-combo-id {
+  color: var(--light-grey);
+  font-size: 0.75em;
+}
+
+.token-combo-amount {
+  color: var(--white);
+}
+
+.token-combo-empty {
+  margin: 0;
+  padding: 0.5em 1ch;
+}
+
+/* Table pager and sortable headers. */
+.table-pager {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+}
+
+.pager-size {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5ch;
+  margin-left: auto;
+}
+
+.pool-table th[role='button'] {
+  cursor: pointer;
+  user-select: none;
+}
+
+.pool-table th[role='button']:hover,
+.pool-table th[aria-sort='ascending'],
+.pool-table th[aria-sort='descending'] {
+  color: var(--green);
+}
+
+/* Grid and flex children must be allowed to shrink below their content. */
+.swap-hero > * {
+  min-width: 0;
+}
+
+.swap-field-row > * {
+  min-width: 0;
+}
+
+@media (max-width: 520px) {
+  .swap-card {
+    max-width: none;
+  }
+
+  .swap-field-row {
+    flex-wrap: wrap;
+  }
+
+  .swap-amount {
+    flex: 1 1 100%;
+    font-size: 1.25em;
+  }
+
+  .token-combo {
+    flex: 1 1 100%;
+  }
+
+  .token-combo-input {
+    width: 100%;
+    max-width: none;
+    text-align: left;
+  }
 }

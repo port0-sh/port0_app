@@ -9,11 +9,14 @@
 
 import { getClient, getPublicAccount, sdkModule } from '../lib/client'
 import { formatAmount, shortAddress } from '../lib/format'
+import { mountTokenCombo, type TokenEntry } from '../ui/tokenCombo'
 import { requestAssets, walletStore } from '../wallet/wallet'
 
 export interface TokenPicker {
   /** Selects a faucet id, adding it to the list when the wallet does not hold it. */
   setValue: (hex: string) => void
+  /** Repopulates the list; used when the pool set arrives after mount. */
+  refresh: () => void
 }
 
 /** The one option shown when the wallet holds nothing this app can use. */
@@ -31,6 +34,12 @@ const faucetMeta = new Map<string, { symbol: string; decimals: number }>()
 
 /** Faucets whose metadata read failed, so the reason is logged once, not per populate. */
 const warned = new Set<string>()
+
+/**
+ * Faucets the node answered as not basic fungible faucets: LP tokens and
+ * network faucets. Permanent, so the read and its chain sync never repeat.
+ */
+const notFungible = new Set<string>()
 
 /** The SDK's fungible-faucet reader, as the module exports it. */
 type FaucetComponent = Awaited<ReturnType<typeof sdkModule>>['BasicFungibleFaucetComponent']
@@ -52,6 +61,17 @@ async function readFaucetMeta(
       const meta = BasicFungibleFaucetComponent.fromAccount(account)
       return { symbol: meta.symbol().toString(), decimals: meta.decimals() }
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      // Not a basic fungible faucet: an LP token, or a network faucet. Expected
+      // and permanent, and no pool can take it, so it is marked unusable once
+      // instead of read, synced, and warned about on every wallet state change.
+      if (/basic fungible faucet component/.test(message)) {
+        if (!notFungible.has(faucetId)) {
+          notFungible.add(faucetId)
+          console.info(`not a basic fungible faucet, skipped: ${faucetId}`)
+        }
+        return undefined
+      }
       if (attempt === 1 && !warned.has(faucetId)) {
         warned.add(faucetId)
         console.warn(`faucet metadata unavailable for ${faucetId}:`, error)
@@ -71,9 +91,74 @@ async function readFaucetMeta(
   return undefined
 }
 
-export function mountTokenPicker(selectId: string): TokenPicker {
+/** The faucet id as a bare lowercase hex string; the wallet may report bech32. */
+function hexOf(
+  raw: string,
+  AccountId: {
+    fromBech32: (value: string) => { toString: () => string }
+  },
+): string {
+  const value = raw.trim()
+  if (/^0x[0-9a-fA-F]+$/.test(value) || /^[0-9a-fA-F]+$/.test(value)) {
+    return value.replace(/^0x/i, "").toLowerCase()
+  }
+  try {
+    return AccountId.fromBech32(value).toString().replace(/^0x/i, "").toLowerCase()
+  } catch {
+    return value.toLowerCase()
+  }
+}
+
+export interface TokenPickerOptions {
+  /**
+   * The id the list must not offer: the token the sibling field holds. The
+   * select's disabled option is not enough, because the dropdown is built from
+   * the entry list and would still offer it.
+   */
+  exclude?: () => string | null
+  /**
+   * True for ids that are pool accounts. A pool is its own LP faucet and now
+   * carries the standard faucet component, so it reads as a valid fungible
+   * faucet; without this filter the launch page would offer LP tokens as pool
+   * tokens.
+   */
+  isPoolFaucet?: (hexId: string) => boolean
+}
+
+export function mountTokenPicker(
+  selectId: string,
+  options: TokenPickerOptions = {},
+): TokenPicker {
   const select = document.getElementById(selectId) as HTMLSelectElement | null
-  if (!select) return { setValue: () => {} }
+  if (!select) return { setValue: () => {}, refresh: () => {} }
+
+  // A text input over the select, so this picker behaves like every other token
+  // field in the app. The select stays the value every caller reads.
+  let entryList: Array<[string, TokenEntry]> = []
+  let poolFaucetsLogged = false
+  const input = document.createElement('input')
+  input.type = 'text'
+  input.className = 'token-combo-input'
+  input.placeholder = 'Select token'
+  input.autocomplete = 'off'
+  input.spellcheck = false
+  select.parentElement?.insertBefore(input, select)
+  select.classList.add('swap-hidden-select')
+  const combo = mountTokenCombo(
+    input,
+    select,
+    () => {
+      // Read on every open, so a token chosen in the sibling field disappears
+      // from this list without a repopulate.
+      const excluded = options.exclude?.() ?? null
+      return {
+        entries: excluded ? entryList.filter(([id]) => id !== excluded) : entryList,
+        emptyNote: walletStore.get().connected ? EMPTY_LABEL : LOGIN_LABEL,
+      }
+    },
+    (id) => entryList.find(([entryId]) => entryId === id)?.[1].symbol ?? shortAddress(id),
+    () => select.dispatchEvent(new Event('change', { bubbles: true })),
+  )
 
   /**
    * Replaces the options, keeping the current choice.
@@ -108,60 +193,92 @@ export function mountTokenPicker(selectId: string): TokenPicker {
 
   const populate = async (): Promise<void> => {
     if (!walletStore.get().connected) {
+      entryList = []
       fill([])
       return
     }
 
-    let assets
+    // Reading the wallet and then each faucet's metadata from the node is not
+    // instant; the field's border pulses until the list is written.
+    combo.setLoading(true)
     try {
-      assets = await requestAssets()
-    } catch (error) {
-      // The wallet refused or failed the read. The list says it is empty; the
-      // reason goes to the console, because a toast per wallet state change
-      // would repeat the same line several times over one page load.
-      console.warn('requestAssets failed:', error)
-      fill([])
-      return
-    }
-
-    const { BasicFungibleFaucetComponent } = await sdkModule()
-    const options: { id: string; label: string }[] = []
-    let skipped = 0
-    for (const asset of assets) {
-      // Failures are not cached: a locked or unsynced wallet can answer on the
-      // next populate, and only successes are worth remembering.
-      let meta = faucetMeta.get(asset.faucetId)
-      if (!meta) {
-        meta = await readFaucetMeta(asset.faucetId, BasicFungibleFaucetComponent)
-        if (meta) faucetMeta.set(asset.faucetId, meta)
-      }
-
-      if (!meta) {
-        // Not a plain fungible faucet. An LP token is issued by the pool account
-        // itself, its metadata does not read as one, and no pool can be created
-        // from it, so it is left out rather than listed as unknown.
-        skipped += 1
-        continue
-      }
-
-      let balance = asset.amount
+      let assets
       try {
-        balance = formatAmount(BigInt(asset.amount), meta.decimals)
-      } catch {
-        // The wallet reported something that is not a whole amount.
+        assets = await requestAssets()
+      } catch (error) {
+        // The wallet refused or failed the read. The list says it is empty; the
+        // reason goes to the console, because a toast per wallet state change
+        // would repeat the same line several times over one page load.
+        console.warn('requestAssets failed:', error)
+        entryList = []
+        fill([])
+        return
       }
-      options.push({
-        id: asset.faucetId,
-        label: `${meta.symbol} (${shortAddress(asset.faucetId)}) · ${balance}`,
-      })
+
+      const { AccountId, BasicFungibleFaucetComponent } = await sdkModule()
+      const listed: { id: string; label: string }[] = []
+      const comboEntries: Array<[string, TokenEntry]> = []
+      let skipped = 0
+      let skippedPools = 0
+      for (const asset of assets) {
+        // A pool account is its own LP faucet. It carries the standard faucet
+        // component now, so it would pass the metadata read; it must not be
+        // offered as a token a pool can hold.
+        if (options.isPoolFaucet?.(hexOf(asset.faucetId, AccountId)) === true) {
+          skippedPools += 1
+          continue
+        }
+        // Failed reads are not cached: a locked or unsynced wallet can answer on
+        // the next populate, and only successes are worth remembering. A faucet
+        // that is not basic fungible is cached, because that cannot change.
+        let meta = faucetMeta.get(asset.faucetId)
+        if (!meta && !notFungible.has(asset.faucetId)) {
+          meta = await readFaucetMeta(asset.faucetId, BasicFungibleFaucetComponent)
+          if (meta) faucetMeta.set(asset.faucetId, meta)
+        }
+
+        if (!meta) {
+          // Not a plain fungible faucet. An LP token is issued by the pool
+          // account itself, its metadata does not read as one, and no pool can
+          // be created from it, so it is left out rather than listed as unknown.
+          skipped += 1
+          continue
+        }
+
+        let rawAmount = 0n
+        let balance = asset.amount
+        try {
+          rawAmount = BigInt(asset.amount)
+          balance = formatAmount(rawAmount, meta.decimals)
+        } catch {
+          // The wallet reported something that is not a whole amount.
+        }
+        listed.push({
+          id: asset.faucetId,
+          label: `${meta.symbol} (${shortAddress(asset.faucetId)}) · ${balance}`,
+        })
+        comboEntries.push([
+          asset.faucetId,
+          { symbol: meta.symbol, decimals: meta.decimals, amount: rawAmount },
+        ])
+      }
+      if (listed.length === 0 && skipped > 0) {
+        // Every asset was skipped. Usually that means the wallet holds nothing
+        // but LP tokens, but it is also what a failed faucet read looks like, so
+        // it is worth one line rather than silence.
+        console.warn(`no poolable token among ${skipped} wallet asset(s)`)
+      }
+      if (skippedPools > 0 && !poolFaucetsLogged) {
+        poolFaucetsLogged = true
+        console.info(
+          `left out ${skippedPools} pool account(s): a pool's LP faucet is not a pool token`,
+        )
+      }
+      entryList = comboEntries
+      fill(listed)
+    } finally {
+      combo.setLoading(false)
     }
-    if (options.length === 0 && skipped > 0) {
-      // Every asset was skipped. Usually that means the wallet holds nothing but
-      // LP tokens, but it is also what a failed faucet read looks like, so it is
-      // worth one line rather than silence.
-      console.warn(`no poolable token among ${skipped} wallet asset(s)`)
-    }
-    fill(options)
   }
 
   void populate()
@@ -175,7 +292,8 @@ export function mountTokenPicker(selectId: string): TokenPicker {
       select.append(new Option(shortAddress(hex), hex))
     }
     select.value = hex
+    combo.refresh()
   }
 
-  return { setValue }
+  return { setValue, refresh: () => void populate() }
 }

@@ -38,7 +38,8 @@ export async function getClient(): Promise<MidenClient> {
     return MidenClient.create({
       rpcUrl: CONFIG.midenRpcUrl,
       feeFaucetId: CONFIG.chainFeeFaucetId,
-      proverUrl: 'testnet',
+      proverUrl: CONFIG.proverUrl,
+      noteTransportUrl: CONFIG.noteTransportUrl,
       autoSync: false,
     })
   })()

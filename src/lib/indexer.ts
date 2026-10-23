@@ -29,8 +29,9 @@ export interface IndexerPool {
   token1_decimals: number | null
   /** Faucet that denominates the network note fees. */
   fee_asset_id: string | null
-  /** Per note script root, in the fee asset's smallest unit. */
-  fee_schedule: FeeScheduleEntry[]
+  /** Per note script root, in the fee asset's smallest unit. The list endpoint
+   * omits it; the single-pool endpoint carries it. */
+  fee_schedule?: FeeScheduleEntry[]
   reserve0: string
   reserve1: string
   lp_supply: string
@@ -109,6 +110,25 @@ export async function fetchPools(
     next_cursor?: string
   }
   return { pools: body.pools, nextCursor: body.next_cursor ?? null }
+}
+
+/** Indexer status: the registry block it has read and its pool counts. */
+export interface IndexerStatus {
+  registry_id: string
+  last_registry_block: number
+  known_pools: number
+  fetched_pools: number
+}
+
+/** Reads the indexer's status, or null when it is unavailable. */
+export async function fetchStatus(indexerUrl: string): Promise<IndexerStatus | null> {
+  try {
+    const response = await fetch(new URL('status', baseUrl(indexerUrl)))
+    if (!response.ok) return null
+    return (await response.json()) as IndexerStatus
+  } catch {
+    return null
+  }
 }
 
 /** One history sample. Amounts are decimal strings; see the file header. */
@@ -191,7 +211,7 @@ export async function toPoolView(
   if (includeNoteFees) {
     const { noteScript, POOL_NOTE_KINDS } = await import('@port0.sh/sdk')
     const schedule = new Map(
-      pool.fee_schedule.map((entry) => [entry.root.toLowerCase(), entry.amount]),
+      (pool.fee_schedule ?? []).map((entry) => [entry.root.toLowerCase(), entry.amount]),
     )
     for (const kind of POOL_NOTE_KINDS) {
       const root = noteScript(kind).root().toHex().toLowerCase()

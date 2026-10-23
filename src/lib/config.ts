@@ -3,20 +3,64 @@
  *
  * Every value is fixed at build time from Vite env vars, so a static
  * deployment embeds its own settings and needs no runtime config fetch.
+ *
+ * `VITE_NETWORK` selects a per-network defaults table. An individual env var
+ * overrides its entry, so a deployment sets the network and only the values
+ * that differ from it.
  */
 
-const DEFAULT_MIDEN_RPC_URL = 'https://rpc.testnet.miden.io'
+/** Networks the app can be built against. */
+export type NetworkName = 'testnet' | 'mainnet'
 
 /**
- * The 0.17 testnet's chain fee faucet, read from the node's protocol
- * configuration. On 0.17 the network-note fee faucet of a pool must be the
- * chain's own: the node never consumes notes for an account whose fee asset
- * differs. Override with VITE_CHAIN_FEE_FAUCET_ID for other networks.
+ * Per-network protocol values.
+ *
+ * Testnet values are the 0.17 configuration. Mainnet values were read from the
+ * partner network on 2026-10-22: the RPC served a sync at height 224,912 and
+ * reported the fee faucet; the prover and the note transport answer with the
+ * same shapes as their testnet counterparts. A proof and a note delivery
+ * confirm the last two.
  */
-const DEFAULT_CHAIN_FEE_FAUCET_ID = '0x4cbdcaffe75f0a317482224dae6436'
+const NETWORKS: Record<
+  NetworkName,
+  {
+    rpcUrl: string
+    chainFeeFaucetId: string
+    proverUrl: string
+    noteTransportUrl: string
+    explorerUrl: string
+  }
+> = {
+  testnet: {
+    rpcUrl: 'https://rpc.testnet.miden.io',
+    chainFeeFaucetId: '0x4cbdcaffe75f0a317482224dae6436',
+    proverUrl: 'testnet',
+    noteTransportUrl: 'testnet',
+    explorerUrl: 'https://testnet.midenscan.com/account',
+  },
+  mainnet: {
+    rpcUrl: 'https://rpc.cedar.miden.io',
+    chainFeeFaucetId: '0xe69e6ca6e39df1b10c1e5399399feb',
+    proverUrl: 'https://tx-prover.cedar.miden.io',
+    noteTransportUrl: 'https://transport.cedar.miden.io',
+    explorerUrl: 'https://explorer.cedar.miden.io/account',
+  },
+}
+
+/** Selected network. Anything other than `mainnet` resolves to testnet. */
+const NETWORK: NetworkName =
+  import.meta.env.VITE_NETWORK?.trim() === 'mainnet' ? 'mainnet' : 'testnet'
+
+const DEFAULTS = NETWORKS[NETWORK]
 
 export const CONFIG = {
   appName: 'port0.sh',
+
+  /** Network this build talks to. */
+  network: NETWORK,
+
+  /** True on the partner mainnet: real funds, closed alpha, no reset. */
+  isMainnet: NETWORK === 'mainnet',
 
   /**
    * Branding. The name, the text mark, and the slogan come from env vars rather
@@ -41,16 +85,27 @@ export const CONFIG = {
    * appends the gRPC service path itself: a base that already carries a path is
    * rejected with `Invalid node URL`.
    */
-  midenRpcUrl:
-    import.meta.env.VITE_MIDEN_RPC_URL?.trim() || DEFAULT_MIDEN_RPC_URL,
+  midenRpcUrl: import.meta.env.VITE_MIDEN_RPC_URL?.trim() || DEFAULTS.rpcUrl,
 
   /**
-   * Faucet of the chain's fee asset (the 0.17 protocol configuration).
-   * Required by MidenClient.create and used as every new pool's network
-   * note-fee faucet.
+   * Faucet of the chain's fee asset. Required by MidenClient.create and used as
+   * every new pool's network note-fee faucet.
    */
   chainFeeFaucetId:
-    import.meta.env.VITE_CHAIN_FEE_FAUCET_ID?.trim() || DEFAULT_CHAIN_FEE_FAUCET_ID,
+    import.meta.env.VITE_CHAIN_FEE_FAUCET_ID?.trim() || DEFAULTS.chainFeeFaucetId,
+
+  /**
+   * Transaction prover. A preset (`local`, `testnet`, `devnet`) or a remote
+   * prover URL. Mainnet proves at the partner network's prover.
+   */
+  proverUrl: import.meta.env.VITE_PROVER_URL?.trim() || DEFAULTS.proverUrl,
+
+  /**
+   * Note transport, for private notes. A preset (`testnet`, `devnet`) or a
+   * remote transport URL.
+   */
+  noteTransportUrl:
+    import.meta.env.VITE_NOTE_TRANSPORT_URL?.trim() || DEFAULTS.noteTransportUrl,
 
   /**
    * Platform fee recipient. Pool creation is gated on this value; the pools
@@ -77,8 +132,7 @@ export const CONFIG = {
    * Register note consumption fee, in the registry's fee asset (the chain fee
    * asset). Must match the registry's note fee schedule. Decimal string.
    */
-  registryRegisterFee:
-    import.meta.env.VITE_REGISTRY_REGISTER_FEE?.trim() || '0',
+  registryRegisterFee: import.meta.env.VITE_REGISTRY_REGISTER_FEE?.trim() || '0',
 
   /**
    * Indexer base URL. When set, pool state is read from the indexer in one
@@ -91,5 +145,5 @@ export const CONFIG = {
    * Block explorer, without a trailing slash. Account ids are appended, so an
    * empty value simply leaves the links off the page.
    */
-  explorerUrl: import.meta.env.VITE_EXPLORER_URL?.trim() ?? '',
+  explorerUrl: import.meta.env.VITE_EXPLORER_URL?.trim() ?? DEFAULTS.explorerUrl,
 } as const

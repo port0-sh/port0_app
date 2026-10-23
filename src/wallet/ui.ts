@@ -12,8 +12,6 @@ import { WalletReadyState } from '@miden-sdk/miden-wallet-adapter-base'
 import { CONFIG } from '../lib/config'
 import { clear, el } from '../lib/dom'
 import { shortAddress } from '../lib/format'
-import { openOneTimeMint } from '../features/oneTimeMint'
-import { openSendPublicNote } from '../features/sendPublicNote'
 import { openModal } from '../ui/modal'
 import { toast } from '../ui/toast'
 import {
@@ -37,67 +35,62 @@ export function mountWallet(): void {
   // required unless the wallet locked in the meantime.
   void restoreSession().catch(() => {})
 
+  /**
+   * The control rebuilds only when its visible state changes. A wallet that is
+   * half-connected keeps emitting `error` and `readyStateChange` events, and a
+   * rebuild on each of those destroyed the open menu the instant it appeared.
+   */
+  let lastControlKey = ''
+  // Wallet errors go to the console and to a sticky toast, never into the
+  // wallet region: the adapter's text is long and diagnostic, not a label.
+  let lastErrorShown: string | null = null
+  walletStore.subscribe(() => {
+    const message = walletStore.get().error
+    if (!message || message === lastErrorShown) return
+    lastErrorShown = message
+    console.error('[wallet]', message)
+    toast(message, 'error', 0)
+  })
+
   function render(): void {
-    closeOpenMenu?.()
-    closeOpenMenu = null
-    clear(root as HTMLElement)
     const state = walletStore.get()
+    const controlKey =
+      state.connected && state.address
+        ? `account:${state.address}`
+        : `login:${state.connecting ? 'connecting' : 'idle'}`
+    if (controlKey !== lastControlKey) {
+      lastControlKey = controlKey
+      closeOpenMenu?.()
+      closeOpenMenu = null
+      clear(root as HTMLElement)
 
-    if (state.connected && state.address) {
-      root!.append(accountControl(state.address))
-      return
+      if (state.connected && state.address) {
+        root!.append(accountControl(state.address))
+      } else {
+        root!.append(
+          el(
+            'button',
+            {
+              class: 'btn btn-primary',
+              type: 'button',
+              onclick: openPicker,
+              disabled: state.connecting,
+            },
+            state.connecting ? 'Connecting…' : 'Login',
+          ),
+        )
+      }
     }
-
-    root!.append(
-      el(
-        'button',
-        {
-          class: 'btn btn-primary',
-          type: 'button',
-          onclick: openPicker,
-          disabled: state.connecting,
-        },
-        state.connecting ? 'Connecting…' : 'Login',
-      ),
-    )
   }
 
   /**
-   * The signed-in control: the account id plus a menu holding the utilities and
-   * disconnect. The menu closes on an outside click or Escape.
+   * The signed-in control: the account id plus a menu holding disconnect. The
+   * menu closes on an outside click or Escape.
    */
   function accountControl(address: string): HTMLElement {
     const menu = el(
       'div',
       { class: 'menu', role: 'menu', hidden: true },
-      el('p', { class: 'menu-label' }, 'Utils'),
-      el(
-        'button',
-        {
-          class: 'menu-item',
-          type: 'button',
-          role: 'menuitem',
-          onclick: () => {
-            close()
-            openOneTimeMint()
-          },
-        },
-        'One-time mint',
-      ),
-      el(
-        'button',
-        {
-          class: 'menu-item',
-          type: 'button',
-          role: 'menuitem',
-          onclick: () => {
-            close()
-            openSendPublicNote()
-          },
-        },
-        'Send public note',
-      ),
-      el('hr', { class: 'menu-rule' }),
       el(
         'button',
         {
@@ -140,6 +133,15 @@ export function mountWallet(): void {
 
     function open(): void {
       menu.hidden = false
+      // The nav row sits low on the index page; open upward when the menu would
+      // fall below the viewport.
+      const triggerBox = trigger.getBoundingClientRect()
+      const menuHeight = menu.getBoundingClientRect().height
+      wrapper.classList.toggle(
+        'menu-up',
+        window.innerHeight - triggerBox.bottom < menuHeight + 16 &&
+          triggerBox.top > menuHeight + 16,
+      )
       trigger.setAttribute('aria-expanded', 'true')
       document.addEventListener('pointerdown', onOutside, true)
       document.addEventListener('keydown', onKey)

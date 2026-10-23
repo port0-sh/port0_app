@@ -1,7 +1,8 @@
 <!doctype html>
-<html lang="en" data-notice-key="port0-app:testnet-disclaimer:v1">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>%VITE_BRAND_MARK_TEXT% Pools</title>
   <meta name="description" content="Browse, swap on, and provide liquidity to port0.sh constant-product pools on Miden." />
   <link rel="canonical" href="%VITE_SITE_URL%/" />
@@ -31,23 +32,31 @@
   <meta name="twitter:image:alt" content="%VITE_BRAND_TAGLINE%" />
   <link rel="stylesheet" href="/src/styles/global.css" />
   <script>
-    // Hides the testnet notice before the first paint when it was dismissed.
+    // Network identity and alpha-notice state, set before the first paint.
+    document.documentElement.dataset.network =
+      '%VITE_NETWORK%' === 'mainnet' ? 'mainnet' : 'testnet'
     try {
-      if (localStorage.getItem(document.documentElement.dataset.noticeKey) === '1') {
+      const key = 'port0-app:alpha-risk:v1:' + document.documentElement.dataset.network
+      if (localStorage.getItem(key) === '1') {
         document.documentElement.dataset.notice = 'dismissed'
       }
     } catch {
-      // Storage unavailable: the notice stays visible, which is the safe default.
+      // Storage unavailable: the notice and the gate stay, which is the safe default.
     }
   </script>
 </head>
 <body data-page="Pools">
 
-  <div id="testnet-notice">
-    <p>
+  <div id="alpha-notice">
+    <p data-network-text="testnet">
       <strong class="error">Miden testnet only.</strong> These tokens have no value, the network
       can be reset, and the contracts can change. Do not send mainnet assets. Nothing here is
       financial advice.
+    </p>
+    <p data-network-text="mainnet">
+      <strong class="error">Closed alpha on Miden mainnet.</strong> Real funds, unaudited
+      contracts, irreversible transactions. Read the
+      <a href="https://docs.port0.sh/app/alpha-risk.html">risk notice</a>.
     </p>
     <button type="button" class="btn" id="notice-dismiss">Dismiss</button>
   </div>
@@ -67,6 +76,7 @@
       <nav class="nav" aria-label="Sections">
         <a href="/" class="active" aria-current="page">Pools</a>
         <a href="/create.html">Launch</a>
+        <a href="/utils.html">Utils</a>
         <a href="/about.html">About</a>
         <a href="https://docs.port0.sh">Docs</a>
       </nav>
@@ -74,6 +84,135 @@
         <button type="button" class="btn btn-primary">Login</button>
       </div>
     </div>
+
+    <section class="swap-hero">
+    <section class="panel swap-card" id="swap-card">
+      <div class="swap-head">
+        <h2>Swap</h2>
+        <button
+          type="button"
+          class="btn swap-icon"
+          id="route-settings-toggle"
+          aria-label="Swap settings"
+          aria-expanded="false"
+        >⚙</button>
+      </div>
+
+      <div class="swap-settings" id="route-settings" hidden>
+        <div class="swap-settings-row">
+          <span class="muted">Max slippage</span>
+          <span class="swap-slippage-input">
+            <input id="route-slippage" type="number" min="0" max="50" step="0.1" value="0.5" />
+            <span class="muted">%</span>
+          </span>
+        </div>
+        <p class="muted">The swap reverts if the price moves past this before it executes.</p>
+      </div>
+
+      <form id="route-form">
+        <div class="swap-field">
+          <div class="swap-field-head">
+            <span class="muted">You pay</span>
+          </div>
+          <div class="swap-field-row">
+            <input
+              id="route-amount"
+              class="swap-amount"
+              type="text"
+              inputmode="decimal"
+              placeholder="0"
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <div class="token-combo">
+              <input
+                id="route-token-in-input"
+                class="token-combo-input"
+                type="text"
+                placeholder="Select token"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <select id="route-token-in" class="swap-hidden-select" aria-hidden="true" tabindex="-1"></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="swap-field-foot">
+          <span class="muted" id="route-balance-in"></span>
+          <span class="swap-percents" id="route-percents" role="group" aria-label="Percent of balance">
+            <button type="button" class="btn swap-percent" data-percent="25">25%</button>
+            <button type="button" class="btn swap-percent" data-percent="50">50%</button>
+            <button type="button" class="btn swap-percent" data-percent="75">75%</button>
+            <button type="button" class="btn swap-percent" data-percent="100">100%</button>
+          </span>
+        </div>
+
+        <div class="swap-flip-row">
+          <button type="button" class="btn swap-icon" id="route-flip" aria-label="Switch pay and receive tokens">
+            ↓
+          </button>
+        </div>
+
+        <div class="swap-field">
+          <div class="swap-field-head">
+            <span class="muted">You receive</span>
+            <span class="muted" id="route-min-out"></span>
+          </div>
+          <div class="swap-field-row">
+            <input id="route-amount-out" class="swap-amount" type="text" placeholder="0" readonly />
+            <div class="token-combo">
+              <input
+                id="route-token-out-input"
+                class="token-combo-input"
+                type="text"
+                placeholder="Select token"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <select id="route-token-out" class="swap-hidden-select" aria-hidden="true" tabindex="-1"></select>
+            </div>
+          </div>
+        </div>
+
+        <div class="swap-details" id="route-quote">
+          <p class="muted">Pick two tokens and an amount.</p>
+        </div>
+
+        <div class="form-actions swap-actions">
+          <button type="submit" class="btn btn-primary swap-submit" id="route-submit">Swap</button>
+          <div class="muted flow-status" id="route-status"></div>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel stats-panel" id="protocol-stats">
+      <h2>Protocol</h2>
+      <div class="protocol-grid">
+        <div class="protocol-stat">
+          <span class="muted protocol-label" title="Both sides of every pool, valued in USDCX">TVL</span>
+          <span class="protocol-figure" id="stat-tvl">—</span>
+        </div>
+        <div class="protocol-stat">
+          <span class="muted protocol-label">Volume 24h</span>
+          <span class="protocol-figure" id="stat-volume">—</span>
+        </div>
+        <div class="protocol-stat">
+          <span class="muted protocol-label">Pools</span>
+          <span class="protocol-figure" id="stat-pools">—</span>
+        </div>
+        <div class="protocol-stat">
+          <span class="muted protocol-label">Swaps 24h</span>
+          <span class="protocol-figure" id="stat-swaps">—</span>
+        </div>
+        <div class="protocol-stat">
+          <span class="muted protocol-label">Median fee APR</span>
+          <span class="protocol-figure" id="stat-apr">—</span>
+        </div>
+      </div>
+      <p class="muted protocol-foot" id="stat-footer"></p>
+    </section>
+    </section>
 
     <section class="panel">
       <div class="toolbar">
@@ -93,8 +232,18 @@
         </span>
       </div>
       <div id="pool-table" class="table-wrap">Loading…</div>
-      <div class="form-actions">
-        <button type="button" class="btn" id="load-more" hidden>Load more</button>
+      <div class="table-pager">
+        <button type="button" class="btn" id="page-prev">← Prev</button>
+        <span class="muted" id="page-status"></span>
+        <button type="button" class="btn" id="page-next">Next →</button>
+        <label class="muted pager-size" for="page-size">
+          Per page
+          <select id="page-size">
+            <option value="10">10</option>
+            <option value="25">25</option>
+            <option value="50">50</option>
+          </select>
+        </label>
       </div>
     </section>
   </main>

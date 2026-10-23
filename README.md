@@ -13,11 +13,16 @@ TypeScript.
 | `/`                      | `index.html`   | Browse every registered pool from the indexer                 |
 | `/pool.html?id=<poolid>` | `pool.html`    | Pool state, swap, add liquidity, remove liquidity             |
 | `/create.html`           | `create.html`  | Deploy a pool and register it                                 |
-| `/about.html`            | `about.html`   | What the pools are, and the risks of a testnet                |
+| `/about.html`            | `about.html`   | What port0 is, and the risk notice                            |
+| `/utils.html`            | `utils.html`   | One-time mint and send public note                            |
+| `/media.html`            | `media.html`   | Mark, wordmark, colors, type, and the unfurl image            |
 
-Every page carries the same chrome: the testnet notice as a strip above the
-header, dismissed once and remembered under the key that `<html data-notice-key>`
-names, the footer with the copyright year, and the chart attribution. The index
+Every page carries the same parts: the alpha notice as a strip above the
+header, the footer with the copyright year and the social links, and the chart
+attribution. The strip shows the text of the selected network. On testnet it is
+dismissible, remembered under `port0-app:alpha-risk:v1:testnet`. On mainnet the
+strip is permanent and the first visit is gated by a modal that records
+acceptance under `port0-app:alpha-risk:v1:mainnet`. The index
 adds the hero drawing, the brand heading under it, a link to the launch page, and
 the slogan.
 
@@ -61,11 +66,15 @@ Environment variables are read at build time (`import.meta.env`):
 
 | Variable                       | Default                        | Meaning                                    |
 | ------------------------------ | ------------------------------ | ------------------------------------------ |
-| `VITE_MIDEN_RPC_URL`           | `https://rpc.testnet.miden.io` | Miden node RPC for on-chain reads          |
-| `VITE_CHAIN_FEE_FAUCET_ID`     | `0x4cbdcaffe75f0a317482224dae6436` | Faucet of the chain's fee asset (0.17 testnet protocol configuration) |
+| `VITE_NETWORK`                 | `testnet`                      | `testnet` or `mainnet`; selects the per-network defaults below |
+| `VITE_MIDEN_RPC_URL`           | per network                    | Miden node RPC for on-chain reads          |
+| `VITE_CHAIN_FEE_FAUCET_ID`     | per network                    | Faucet of the chain's fee asset            |
+| `VITE_PROVER_URL`              | per network                    | `local`, `testnet`, `devnet`, or a remote prover URL |
+| `VITE_NOTE_TRANSPORT_URL`      | per network                    | `testnet`, `devnet`, or a remote transport URL, for private notes |
+| `VITE_EXPLORER_URL`            | per network                    | Block explorer base; account ids are appended |
 | `VITE_PROTOCOL_FEE_RECIPIENT`  | (empty)                        | Platform fee recipient, displayed and required for creation; the on-chain destination lives in the registry |
 | `VITE_REGISTRY_ID`             | (empty)                        | On-chain pool registry account; empty skips registration |
-| `VITE_REGISTRY_REGISTER_FEE`   | `210`                          | Register note consumption fee, in the registry's fee asset; the protocol maximum, so the sponsorship always covers the actual transaction fee |
+| `VITE_REGISTRY_REGISTER_FEE`   | `0`                            | Register note consumption fee, in the registry's fee asset; must match the registry's note fee schedule |
 | `VITE_INDEXER_URL`             | (empty)                        | Indexer base URL; empty disables browsing and the pool page |
 | `VITE_PARA_API_KEY`            | (empty)                        | Para API key; empty keeps the Para option disabled |
 | `VITE_PARA_ENVIRONMENT`        | `BETA`                         | Para environment; `PRODUCTION` for production builds |
@@ -88,10 +97,21 @@ from it. The indexer reads the on-chain registry for the pool set and each
 pool account for reserves, token metadata, and the network note fee schedule.
 An empty value disables browsing and the pool page.
 
-In development the RPC is reached through a same-origin proxy (`/rpc.Api`,
-configured in `vite.config.ts`) so the browser never sends cross-origin
-gRPC-web requests. Production builds talk to the RPC directly. The app targets
-the 0.17 testnet only.
+## Networks
+
+| Value          | testnet                            | mainnet                                |
+| -------------- | ---------------------------------- | -------------------------------------- |
+| RPC            | `https://rpc.testnet.miden.io`     | `https://rpc.cedar.miden.io`           |
+| Fee faucet     | `0x4cbdcaffe75f0a317482224dae6436` | `0xe69e6ca6e39df1b10c1e5399399feb`     |
+| Prover         | `testnet`                          | `https://tx-prover.cedar.miden.io`     |
+| Note transport | `testnet`                          | `https://transport.cedar.miden.io`     |
+| Explorer       | `https://testnet.midenscan.com/account` | `https://explorer.cedar.miden.io/account` |
+
+The node sends the CORS headers a browser needs, so development and builds talk
+to the RPC directly; no proxy is involved. The registry id, the pool code
+commitment, and the protocol fee recipient are deployed per network and are not
+defaults. The mainnet endpoints were read from the partner network on
+2026-10-22.
 
 ## Architecture
 
@@ -109,9 +129,9 @@ src/lib/
   format.ts     bigint-exact amount parsing/formatting, id shortening, bps
   history.ts    exact price ratios and chart series (tested)
   indexer.ts    pool source: indexer fetch plus fee-schedule root mapping
-  site.ts       footer year and the one-time testnet disclaimer
+  site.ts       footer year, the alpha notice, and the mainnet gate
   state.ts      ~30-line pub/sub store; the entire state layer
-  token.ts      launchpad token validation
+  token.ts      fixed-supply token validation
 src/features/
   oneTimeMint.ts    fixed-supply faucet launcher
   sendPublicNote.ts public-note sender
@@ -125,8 +145,10 @@ src/wallet/
 src/pages/
   home.ts       pool table from the indexer, 15 s refresh while visible
   pool.ts       state summary, quotes, swap/add/remove, history chart
-  create.ts     pool and launchpad deployment, registration
-  about.ts      the site chrome on the about page
+  create.ts     pool deployment and registration
+  about.ts      static page; mounts the wallet control and footer
+  media.ts      static page; mounts the wallet control and footer
+  utils.ts      one-time mint and send public note
 ```
 
 The home page never loads the SDK: the table renders from the indexer, and
@@ -216,15 +238,20 @@ is younger, and that window is shown next to the rate.
 ## Wallet menu
 
 The header shows a Login button until a wallet connects. Afterwards it shows the
-account id; pressing it opens a menu whose Utils group holds two utilities and
-whose last item disconnects.
+account id; pressing it opens a menu with one item, Disconnect.
+
+## Utils page
+
+The chain utilities live on their own page at `/utils.html`, in the top
+navigation. Both act through a wallet, so their buttons stay disabled until one
+connects.
 
 | Utility | What it does |
 | --- | --- |
 | One-time mint | Creates a public faucet whose whole supply is minted to the wallet in one transaction, with `maxSupply` equal to that supply. Nothing can be minted afterwards and no auth component is installed |
 | Send public note | Sends the chain fee asset through the wallet's own `requestSend` with a public note type, the only path that can target an account that does not exist on-chain yet |
 
-Both build their form in a modal, so no page carries a utility it does not need.
+Each builds its form in a modal.
 
 ## Branding
 
@@ -257,7 +284,7 @@ Japanese ASCII art the character widths its authors assumed; its licences
 ## Pool operations
 
 All pool actions are notes to the pool account. The app builds the note and
-its FEE_SPONSORSHIP note through the XYK SDK with `submit: false`, then hands
+its FEE_SPONSORSHIP note through the port0 SDK with `submit: false`, then hands
 the resulting `TransactionRequest` to the connected wallet, which signs,
 submits, and reports confirmation.
 
@@ -274,13 +301,12 @@ transaction, which commits the account and pays its first fee. There is no
 scriptless deploy, because the 0.17 network auth rejects a transaction with no
 effect.
 
-## Launchpad
+## Token minting
 
-The create page can mint a fixed-supply token before pool creation: the
-faucet is created with `maxSupply` equal to the initial supply and the whole
-supply is minted to the creator's wallet. The faucet uses Falcon keyed auth,
-so nobody can mint more. The launched faucet id can fill either token field
-of the pool form with one click.
+The Utils page mints a fixed-supply token: the faucet is created with
+`maxSupply` equal to the initial supply and the whole supply is minted to the
+caller's wallet. Nothing remains to mint afterwards. The faucet id can fill
+either token field of the create page's pool form.
 
 Funding: a fresh faucet has an empty vault and cannot pay the fee of its own
 first transaction, so the connected wallet sends 0.000266 USDCX (the chain
@@ -293,7 +319,7 @@ transaction.
 
 Validation (see `src/lib/token.ts`): symbol 3-6 uppercase ASCII letters (the
 0.17 protocol rejects digits), decimals integer 0-8, initial supply entered
-in tokens and bounded by the XYK contract's `MAX_AMOUNT` (2^57 base units;
+in tokens and bounded by the port0 contract's `MAX_AMOUNT` (2^57 base units;
 amounts are u64 with u128 intermediates and 10_000 bps fee headroom).
 
 ## Fee model
@@ -327,7 +353,8 @@ runs.
 
 ## Known limitations
 
-- Testnet only. The 0.17 testnet is the only network this app targets.
+- Closed alpha. The app builds for testnet by default and for the Miden partner
+  mainnet with `VITE_NETWORK=mainnet`.
 - The indexer is required. An empty `VITE_INDEXER_URL` disables browsing and
   the pool page.
 - Network note fees use the chain's own fee asset and faucet (0.17 protocol

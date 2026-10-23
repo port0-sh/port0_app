@@ -1,7 +1,8 @@
 <!doctype html>
-<html lang="en" data-notice-key="port0-app:testnet-disclaimer:v1">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>%VITE_BRAND_MARK_TEXT% About</title>
   <meta name="description" content="What port0.sh is, who built it, and where to find it." />
   <link rel="canonical" href="%VITE_SITE_URL%/about.html" />
@@ -31,23 +32,31 @@
   <meta name="twitter:image:alt" content="%VITE_BRAND_TAGLINE%" />
   <link rel="stylesheet" href="/src/styles/global.css" />
   <script>
-    // Hides the testnet notice before the first paint when it was dismissed.
+    // Network identity and alpha-notice state, set before the first paint.
+    document.documentElement.dataset.network =
+      '%VITE_NETWORK%' === 'mainnet' ? 'mainnet' : 'testnet'
     try {
-      if (localStorage.getItem(document.documentElement.dataset.noticeKey) === '1') {
+      const key = 'port0-app:alpha-risk:v1:' + document.documentElement.dataset.network
+      if (localStorage.getItem(key) === '1') {
         document.documentElement.dataset.notice = 'dismissed'
       }
     } catch {
-      // Storage unavailable: the notice stays visible, which is the safe default.
+      // Storage unavailable: the notice and the gate stay, which is the safe default.
     }
   </script>
 </head>
 <body data-page="About">
 
-  <div id="testnet-notice">
-    <p>
+  <div id="alpha-notice">
+    <p data-network-text="testnet">
       <strong class="error">Miden testnet only.</strong> These tokens have no value, the network
       can be reset, and the contracts can change. Do not send mainnet assets. Nothing here is
       financial advice.
+    </p>
+    <p data-network-text="mainnet">
+      <strong class="error">Closed alpha on Miden mainnet.</strong> Real funds, unaudited
+      contracts, irreversible transactions. Read the
+      <a href="https://docs.port0.sh/app/alpha-risk.html">risk notice</a>.
     </p>
     <button type="button" class="btn" id="notice-dismiss">Dismiss</button>
   </div>
@@ -60,6 +69,7 @@
     <nav class="nav">
       <a href="/">Pools</a>
       <a href="/create.html">Launch</a>
+      <a href="/utils.html">Utils</a>
       <a href="/about.html" class="active" aria-current="page">About</a>
       <a href="https://docs.port0.sh">Docs</a>
     </nav>
@@ -83,17 +93,29 @@
         Questions go to <a href="mailto:hello@port0.sh">hello@port0.sh</a>, or to
         <a href="https://t.me/port0_sh" rel="noopener" target="_blank">Telegram</a>.
       </p>
+      <p>
+        The <a href="/media.html">media kit</a> carries the mark, the wordmark, the
+        colors, and the type.
+      </p>
     </section>
 
     <section class="panel">
       <h2>Risk notice</h2>
-      <p class="error">Miden testnet only. The tokens have no value.</p>
-      <ul>
+      <p class="error" data-network-text="testnet">Miden testnet only. The tokens have no value.</p>
+      <ul data-network-text="testnet">
         <li>The network can be reset, and balances and pools can disappear.</li>
         <li>The contracts are unaudited. Interfaces, contracts, and fees can change without notice.</li>
         <li>Do not send mainnet assets. There is no mainnet deployment.</li>
         <li>Nothing here is financial advice. Do not deposit anything you cannot lose.</li>
       </ul>
+      <p class="error" data-network-text="mainnet">Closed alpha on Miden mainnet. Balances are real funds.</p>
+      <ul data-network-text="mainnet">
+        <li>The contracts are unaudited. Interfaces, contracts, and fees can change without notice.</li>
+        <li>Transactions are irreversible. There is no refund and no recovery of lost keys.</li>
+        <li>A pool can lose value, and a contract defect can lock or drain deposits.</li>
+        <li>Nothing here is financial advice. Do not deposit anything you cannot lose.</li>
+      </ul>
+      <p><a href="https://docs.port0.sh/app/alpha-risk.html">Full risk notice</a>.</p>
     </section>
   </main>
 

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>%VITE_BRAND_MARK_TEXT% Utils</title>
+  <meta name="description" content="Small chain utilities for port0.sh: mint a fixed-supply token, and send a public note to an account that does not exist yet." />
+  <link rel="canonical" href="%VITE_SITE_URL%/utils.html" />
+  <meta name="theme-color" content="#000000" />
+
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <link rel="manifest" href="/site.webmanifest" />
+
+  <meta property="og:site_name" content="%VITE_BRAND_NAME%" />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="%VITE_SITE_URL%/utils.html" />
+  <meta property="og:title" content="%VITE_BRAND_TAGLINE%" />
+  <meta property="og:description" content="%VITE_BRAND_DESCRIPTION%" />
+  <meta property="og:image" content="%VITE_SITE_URL%/og-image.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="%VITE_BRAND_TAGLINE%" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="%VITE_BRAND_X_HANDLE%" />
+  <meta name="twitter:title" content="%VITE_BRAND_TAGLINE%" />
+  <meta name="twitter:description" content="%VITE_BRAND_DESCRIPTION%" />
+  <meta name="twitter:image" content="%VITE_SITE_URL%/twitter-card.png" />
+  <meta name="twitter:image:alt" content="%VITE_BRAND_TAGLINE%" />
+  <link rel="stylesheet" href="/src/styles/global.css" />
+  <script>
+    // Network identity and alpha-notice state, set before the first paint.
+    document.documentElement.dataset.network =
+      '%VITE_NETWORK%' === 'mainnet' ? 'mainnet' : 'testnet'
+    try {
+      const key = 'port0-app:alpha-risk:v1:' + document.documentElement.dataset.network
+      if (localStorage.getItem(key) === '1') {
+        document.documentElement.dataset.notice = 'dismissed'
+      }
+    } catch {
+      // Storage unavailable: the notice and the gate stay, which is the safe default.
+    }
+  </script>
+</head>
+<body data-page="Utils">
+
+  <div id="alpha-notice">
+    <p data-network-text="testnet">
+      <strong class="error">Miden testnet only.</strong> These tokens have no value, the network
+      can be reset, and the contracts can change. Do not send mainnet assets. Nothing here is
+      financial advice.
+    </p>
+    <p data-network-text="mainnet">
+      <strong class="error">Closed alpha on Miden mainnet.</strong> Real funds, unaudited
+      contracts, irreversible transactions. Read the
+      <a href="https://docs.port0.sh/app/alpha-risk.html">risk notice</a>.
+    </p>
+    <button type="button" class="btn" id="notice-dismiss">Dismiss</button>
+  </div>
+
+  <header class="header">
+    <a class="brand" href="/">
+      <span class="brand-mark-box"><img src="/favicon.svg" alt="" class="brand-mark" /></span>
+      <span class="brand-name">%VITE_BRAND_NAME%</span>
+    </a>
+    <nav class="nav">
+      <a href="/">Pools</a>
+      <a href="/create.html">Launch</a>
+      <a href="/utils.html" class="active" aria-current="page">Utils</a>
+      <a href="/about.html">About</a>
+      <a href="https://docs.port0.sh" target="_blank" rel="noopener">Docs</a>
+    </nav>
+    <div class="wallet" id="wallet" aria-live="polite">
+      <button type="button" class="btn btn-primary">Login</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <h1>Utils</h1>
+    <p class="muted" id="util-hint">Connect a wallet to use these.</p>
+
+    <section class="panel">
+      <h2>One-time mint</h2>
+      <p>
+        Creates a faucet whose whole supply is minted to the wallet in one transaction.
+        Nothing can be minted afterwards, and no auth component is installed.
+      </p>
+      <button type="button" class="btn btn-primary" id="util-mint" disabled>Mint a token</button>
+    </section>
+
+    <section class="panel">
+      <h2>Send public note</h2>
+      <p>
+        Sends the chain fee asset to an account that does not exist on chain yet. The
+        wallet sends a public note, which is the only path that can target such an
+        account.
+      </p>
+      <button type="button" class="btn" id="util-send" disabled>Send a note</button>
+    </section>
+  </main>
+
+  <footer class="footer">Copyright © <span id="footer-year">2026</span> <span id="footer-brand">%VITE_BRAND_NAME%</span></footer>
+
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <script type="module" src="/src/pages/utils.ts"></script>
+</body>
+</html>

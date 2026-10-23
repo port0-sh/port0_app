@@ -1,7 +1,8 @@
 <!doctype html>
-<html lang="en" data-notice-key="port0-app:testnet-disclaimer:v1">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>%VITE_BRAND_MARK_TEXT% Launch</title>
   <meta name="description" content="Launch a token and deploy a port0.sh constant-product pool on Miden." />
   <link rel="canonical" href="%VITE_SITE_URL%/create.html" />
@@ -31,23 +32,31 @@
   <meta name="twitter:image:alt" content="%VITE_BRAND_TAGLINE%" />
   <link rel="stylesheet" href="/src/styles/global.css" />
   <script>
-    // Hides the testnet notice before the first paint when it was dismissed.
+    // Network identity and alpha-notice state, set before the first paint.
+    document.documentElement.dataset.network =
+      '%VITE_NETWORK%' === 'mainnet' ? 'mainnet' : 'testnet'
     try {
-      if (localStorage.getItem(document.documentElement.dataset.noticeKey) === '1') {
+      const key = 'port0-app:alpha-risk:v1:' + document.documentElement.dataset.network
+      if (localStorage.getItem(key) === '1') {
         document.documentElement.dataset.notice = 'dismissed'
       }
     } catch {
-      // Storage unavailable: the notice stays visible, which is the safe default.
+      // Storage unavailable: the notice and the gate stay, which is the safe default.
     }
   </script>
 </head>
 <body data-page="Launch">
 
-  <div id="testnet-notice">
-    <p>
+  <div id="alpha-notice">
+    <p data-network-text="testnet">
       <strong class="error">Miden testnet only.</strong> These tokens have no value, the network
       can be reset, and the contracts can change. Do not send mainnet assets. Nothing here is
       financial advice.
+    </p>
+    <p data-network-text="mainnet">
+      <strong class="error">Closed alpha on Miden mainnet.</strong> Real funds, unaudited
+      contracts, irreversible transactions. Read the
+      <a href="https://docs.port0.sh/app/alpha-risk.html">risk notice</a>.
     </p>
     <button type="button" class="btn" id="notice-dismiss">Dismiss</button>
   </div>
@@ -60,6 +69,7 @@
     <nav class="nav">
       <a href="/">Pools</a>
       <a href="/create.html" class="active" aria-current="page">Launch</a>
+      <a href="/utils.html">Utils</a>
       <a href="/about.html">About</a>
       <a href="https://docs.port0.sh">Docs</a>
     </nav>
@@ -115,7 +125,7 @@
         <button class="btn btn-primary" id="deploy-button" disabled>Connect wallet to create</button>
         <button class="btn" id="retry-button" hidden>Retry</button>
         <button class="btn" id="restart-button" hidden>Restart flow</button>
-        <span class="muted" id="deploy-status"></span>
+        <div class="muted flow-status" id="deploy-status"></div>
       </div>
       <p class="muted" style="margin-top: 0.75rem">Network fees are paid from your wallet in USDCX.</p>
       <p id="deploy-result" hidden>Pool created: <a id="deploy-result-link" href="/pool.html">open pool page →</a></p>

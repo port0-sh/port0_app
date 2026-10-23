@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import {
   MAX_INITIAL_SUPPLY,
+  NAME_MAX_BYTES,
+  NAME_MAX_CHARS,
   normalizeSymbol,
   parseInitialSupply,
+  tokenNameOrDefault,
   validateDecimals,
   validateInitialSupply,
   validateSymbol,
+  validateTokenName,
 } from './token'
 
 describe('validateSymbol', () => {
-  it('accepts 3-6 uppercase letter symbols', () => {
+  it('accepts 3-12 uppercase letter symbols', () => {
     expect(validateSymbol('MEME')).toBeNull()
     expect(validateSymbol('abc')).toBeNull()
     expect(validateSymbol('TOKEN')).toBeNull()
@@ -17,7 +21,8 @@ describe('validateSymbol', () => {
 
   it('rejects wrong lengths', () => {
     expect(validateSymbol('AB')).toMatch(/at least/)
-    expect(validateSymbol('ABCDEFG')).toMatch(/at most/)
+    expect(validateSymbol('ABCDEFGHIJKL')).toBeNull()
+    expect(validateSymbol('ABCDEFGHIJKLM')).toMatch(/at most/)
   })
 
   it('rejects digits and other characters (0.17 protocol: letters only)', () => {
@@ -82,5 +87,42 @@ describe('validateInitialSupply', () => {
 describe('parseInitialSupply', () => {
   it('converts token units by decimals', () => {
     expect(parseInitialSupply('1000000', 4)).toBe(10_000_000_000n)
+  })
+})
+
+describe('validateTokenName', () => {
+  it('accepts an empty name, which falls back to the symbol', () => {
+    expect(validateTokenName('')).toBeNull()
+    expect(validateTokenName('   ')).toBeNull()
+  })
+
+  it('accepts mixed case, spaces, and punctuation', () => {
+    expect(validateTokenName('My Token')).toBeNull()
+    expect(validateTokenName('Doge 2.0 (test)')).toBeNull()
+  })
+
+  it('bounds the length in characters', () => {
+    expect(validateTokenName('a'.repeat(NAME_MAX_CHARS))).toBeNull()
+    expect(validateTokenName('a'.repeat(NAME_MAX_CHARS + 1))).toMatch(/at most/)
+    expect(validateTokenName('\u{1F600}'.repeat(NAME_MAX_CHARS))).toMatch(/bytes/)
+  })
+
+  it('reports the byte limit when multi-byte characters exhaust it first', () => {
+    // Four bytes per emoji, so eight fit and nine do not.
+    expect(validateTokenName('\u{1F600}'.repeat(8))).toBeNull()
+    expect(NAME_MAX_BYTES).toBe(32)
+    expect(validateTokenName('\u{1F600}'.repeat(9))).toMatch(/bytes/)
+  })
+
+  it('rejects control characters', () => {
+    expect(validateTokenName('bad\u0000name')).toMatch(/control/)
+  })
+})
+
+describe('tokenNameOrDefault', () => {
+  it('uses the symbol when the name is empty', () => {
+    expect(tokenNameOrDefault('', 'MEME')).toBe('MEME')
+    expect(tokenNameOrDefault('  ', 'MEME')).toBe('MEME')
+    expect(tokenNameOrDefault('Meme Coin', 'MEME')).toBe('Meme Coin')
   })
 })

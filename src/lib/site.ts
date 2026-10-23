@@ -1,17 +1,19 @@
 /**
- * Per-page chrome shared by every entry point: the footer copyright year, the
- * chart attribution, and the testnet notice. Each page module calls
- * `mountSiteChrome()` next to `mountWallet()`.
+ * Shared by every entry point: the footer copyright year, the social links,
+ * the chart attribution, and the alpha notice. Each page module calls
+ * `mountSite()` next to `mountWallet()`.
  *
  * The notice is markup, so it reads without JavaScript, and it sits above the
- * header rather than over the page. Dismissing it sets the flag named by
- * `<html data-notice-key>`; the inline script in the page head reads that flag
- * before the first paint of a later visit, so it never flashes back.
+ * header rather than over the page. On testnet the bar is dismissible; on
+ * mainnet it is permanent and the first visit is gated by a modal. Acceptance
+ * is recorded under a per-network key that the inline script in each page head
+ * reads before the first paint of a later visit, so the bar never flashes back.
  */
 
 import { mountBrand } from './brand'
 import { CONFIG } from './config'
 import { el } from './dom'
+import { playArrivalBell, setSoundEnabled, soundEnabled } from './sound'
 
 /** Where the chart library's attribution links to. */
 const TRADINGVIEW_URL = 'https://www.tradingview.com/'
@@ -23,12 +25,52 @@ const SOCIALS: ReadonlyArray<{ label: string; href: string }> = [
   { label: 'GitHub', href: 'https://github.com/port0-sh' },
 ]
 
-export function mountSiteChrome(): void {
+export function mountSite(): void {
   mountBrand()
   setFooterYear()
   setFooterSocials()
   setChartAttribution()
   mountNotice()
+  mountSoundToggle()
+}
+
+/**
+ * The arrival bell's on/off button, in the menu row beside the wallet. The
+ * preference is one `localStorage` key, and turning the bell on rings it once
+ * so the choice is audible.
+ */
+function mountSoundToggle(): void {
+  if (document.getElementById('sound-toggle')) return
+  // The wallet control is in the menu row on the home page and in the site
+  // header everywhere else. Both sit inside one flex cell with the button, so a
+  // narrow viewport cannot auto-place the button on a row of its own.
+  const wallet = document.getElementById('wallet')
+  const parent = wallet?.parentElement
+  if (!wallet || !parent) return
+  const tools = el('div', { class: 'header-tools' })
+  parent.insertBefore(tools, wallet)
+  tools.append(wallet)
+  const button = el('button', {
+    type: 'button',
+    class: 'btn sound-toggle',
+    id: 'sound-toggle',
+  })
+  const render = (): void => {
+    const on = soundEnabled()
+    // The glyph alone: the word made the button wide enough to wrap the header.
+    button.textContent = on ? '🔊' : '🔇'
+    button.setAttribute('aria-pressed', String(on))
+    button.setAttribute('aria-label', on ? 'Arrival bell on' : 'Arrival bell off')
+    button.title = on ? 'Arrival bell on' : 'Arrival bell off'
+  }
+  button.addEventListener('click', () => {
+    const on = !soundEnabled()
+    setSoundEnabled(on)
+    render()
+    if (on) playArrivalBell()
+  })
+  render()
+  tools.append(button)
 }
 
 /**
@@ -70,25 +112,98 @@ function setFooterYear(): void {
   if (brand) brand.textContent = CONFIG.brand.name
 }
 
+/** Acknowledgement key for the alpha notice, one per network. */
+function alphaKey(): string {
+  return `port0-app:alpha-risk:v1:${CONFIG.network}`
+}
+
+/** Whether this browser already accepted the alpha notice for this network. */
+function alphaAccepted(): boolean {
+  try {
+    return localStorage.getItem(alphaKey()) === '1'
+  } catch {
+    return false
+  }
+}
+
+/** Records acceptance and hides the notice bar. */
+function acceptAlpha(): void {
+  try {
+    localStorage.setItem(alphaKey(), '1')
+  } catch {
+    // Storage unavailable: the gate reappears next load rather than disappearing.
+  }
+  document.documentElement.dataset.notice = 'dismissed'
+}
+
 /**
- * Wires the testnet notice's dismiss button.
+ * Wires the alpha notice and, on mainnet, the acknowledgement gate.
  *
- * The key has one name in one place, the page's `<html data-notice-key>`, which
- * the head script reads as well. A browser that has no storage, or refuses it,
- * keeps the notice visible: the failing direction is the safe one.
+ * On testnet the bar is dismissible. On mainnet the bar is permanent and a
+ * first visit opens a modal that only the accept button closes: real funds are
+ * at stake, and a click on the backdrop or the Esc key must not pass as
+ * consent.
  */
 function mountNotice(): void {
-  const notice = document.getElementById('testnet-notice')
+  const notice = document.getElementById('alpha-notice')
   const dismiss = notice?.querySelector<HTMLButtonElement>('#notice-dismiss')
-  if (!notice || !dismiss) return
+  dismiss?.addEventListener('click', acceptAlpha)
 
-  dismiss.addEventListener('click', () => {
-    try {
-      const key = document.documentElement.dataset.noticeKey
-      if (key) localStorage.setItem(key, '1')
-    } catch {
-      // Storage unavailable: the notice reappears next load rather than hiding.
-    }
-    document.documentElement.dataset.notice = 'dismissed'
+  if (CONFIG.isMainnet && !alphaAccepted()) mountAlphaGate()
+}
+
+/** Opens the mainnet acknowledgement modal. */
+function mountAlphaGate(): void {
+  // `closedby="none"` is the standard way to disable light dismiss (Esc and
+  // backdrop). The cancel listener below is the fallback for browsers that do
+  // not implement the attribute, and headless Chromium does not honour it.
+  const dialog = el('dialog', { class: 'modal alpha-gate', closedby: 'none' })
+
+  const accept = el(
+    'button',
+    { type: 'button', class: 'btn btn-primary', id: 'alpha-accept' },
+    'I understand and accept',
+  )
+  accept.addEventListener('click', () => {
+    acceptAlpha()
+    if (dialog.open) dialog.close()
+    dialog.remove()
   })
+
+  dialog.append(
+    el('h2', {}, 'Closed alpha'),
+    el(
+      'p',
+      {},
+      `${CONFIG.brand.name} runs on the Miden partner mainnet. Balances are real funds.`,
+    ),
+    el(
+      'ul',
+      {},
+      el('li', {}, 'The contracts are unaudited and can change.'),
+      el('li', {}, 'Transactions are irreversible. There is no support desk and no refund.'),
+      el('li', {}, 'Network and application fees are non-refundable.'),
+      el('li', {}, 'The pools are experimental and can lose value.'),
+    ),
+    el(
+      'p',
+      {},
+      'The ',
+      el(
+        'a',
+        { href: 'https://docs.port0.sh/app/alpha-risk.html', target: '_blank', rel: 'noopener' },
+        'risk notice',
+      ),
+      ' states the full terms. Read it before depositing.',
+    ),
+    el('div', { class: 'form-actions' }, accept),
+  )
+
+  // Esc must not dismiss the gate; the accept button is the only exit.
+  // `cancel` is cancelable, so preventing it stops the close where the browser
+  // honours that; `closedby="none"` covers the rest.
+  dialog.addEventListener('cancel', (event) => event.preventDefault())
+
+  document.body.append(dialog)
+  dialog.showModal()
 }

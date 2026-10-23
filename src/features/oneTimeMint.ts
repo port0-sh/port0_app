@@ -17,11 +17,16 @@ import { el, setText } from '../lib/dom'
 import { shortHex } from '../lib/format'
 import {
   DEFAULT_INITIAL_SUPPLY,
+  NAME_MAX_CHARS,
   normalizeSymbol,
   parseInitialSupply,
+  SYMBOL_MAX_LENGTH,
+  SYMBOL_MIN_LENGTH,
+  tokenNameOrDefault,
   validateDecimals,
   validateInitialSupply,
   validateSymbol,
+  validateTokenName,
 } from '../lib/token'
 import { openModal } from '../ui/modal'
 import { toast } from '../ui/toast'
@@ -42,10 +47,18 @@ export function openOneTimeMint(): void {
   const symbol = el('input', {
     type: 'text',
     placeholder: 'MEME',
-    minlength: 3,
-    maxlength: 6,
+    minlength: SYMBOL_MIN_LENGTH,
+    maxlength: SYMBOL_MAX_LENGTH,
     spellcheck: false,
     required: true,
+  })
+  // Optional: the faucet's display name, which wallets show next to the symbol.
+  // Empty means "use the symbol", which is the standards' default.
+  const tokenName = el('input', {
+    type: 'text',
+    placeholder: 'My Token',
+    maxlength: NAME_MAX_CHARS,
+    spellcheck: false,
   })
   const decimals = el('input', { type: 'number', min: 0, max: 8, step: 1, value: '4' })
   const supply = el('input', {
@@ -83,7 +96,18 @@ export function openOneTimeMint(): void {
     { class: 'form-grid', autocomplete: 'off' },
     el('label', {}, 'Symbol'),
     symbol,
-    el('span', { class: 'muted hint' }, '3 to 6 uppercase letters, no digits.'),
+    el(
+      'span',
+      { class: 'muted hint' },
+      `${SYMBOL_MIN_LENGTH} to ${SYMBOL_MAX_LENGTH} uppercase letters, no digits.`,
+    ),
+    el('label', {}, 'Name'),
+    tokenName,
+    el(
+      'span',
+      { class: 'muted hint' },
+      `Optional display name, up to ${NAME_MAX_CHARS} characters. Defaults to the symbol.`,
+    ),
     el('label', {}, 'Decimals'),
     decimals,
     el('label', {}, 'Supply (tokens)'),
@@ -108,7 +132,10 @@ export function openOneTimeMint(): void {
 
       const symbolError = validateSymbol(symbol.value)
       if (symbolError) throw new Error(symbolError)
-      const name = normalizeSymbol(symbol.value)
+      const nameError = validateTokenName(tokenName.value)
+      if (nameError) throw new Error(nameError)
+      const ticker = normalizeSymbol(symbol.value)
+      const name = tokenNameOrDefault(tokenName.value, ticker)
 
       const digits = Number(decimals.value)
       const decimalsError = validateDecimals(digits)
@@ -130,7 +157,7 @@ export function openOneTimeMint(): void {
         type: 'FungibleFaucet',
         storage: 'public',
         name,
-        symbol: name,
+        symbol: ticker,
         decimals: digits,
         maxSupply: total,
       })

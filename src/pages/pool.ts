@@ -9,7 +9,7 @@
  * signs, submits and confirms.
  */
 
-import type { Pool, PoolConfig, PoolState } from '@port0.sh/sdk'
+import { lpTokenSymbol, type Pool, type PoolConfig, type PoolState } from '@port0.sh/sdk'
 import type { AccountId } from '@miden-sdk/miden-sdk'
 import {
   getClient,
@@ -27,7 +27,6 @@ import {
   feeSplit,
   formatAmount,
   formatBps,
-  formatDuration,
   formatRate,
   isHexId,
   normalizeHex,
@@ -37,10 +36,14 @@ import {
   shortHex,
   withHexPrefix,
 } from '../lib/format'
+import { feeAprOneDay } from '../lib/fees'
 import { fetchPool, fetchPoolHistory, toPoolView, type HistoryResolution, type IndexerPool, type IndexerSnapshot, type PoolView } from '../lib/indexer'
 import { candles, formatScaled, priceScaled, sampleTime } from '../lib/history'
 import { mountPriceChart, type ChartTheme, type PriceChart } from '../lib/chart'
-import { mountSiteChrome } from '../lib/site'
+import { mountSite } from '../lib/site'
+import { playArrivalBell, primeSound } from '../lib/sound'
+import { startSpinner } from '../ui/spinner'
+import { mountTokenCombo, type TokenSource } from '../ui/tokenCombo'
 import { toast } from '../ui/toast'
 import { mountWallet } from '../wallet/ui'
 import {
@@ -61,7 +64,7 @@ import {
 const DEADLINE_MARGIN_SECONDS = 3600n
 
 mountWallet()
-mountSiteChrome()
+mountSite()
 
 const pageParams = new URLSearchParams(window.location.search)
 /** Set by the launch flow, which is the only thing that knows a pool is new. */
@@ -81,11 +84,12 @@ const poolLinksRow = qs<HTMLElement>(document, '#pool-links-row')
 
 const swapForm = qs<HTMLFormElement>(document, '#swap-form')
 const swapSide = qs<HTMLSelectElement>(document, '#swap-side')
+const swapSideInput = qs<HTMLInputElement>(document, '#swap-side-input')
 const swapAmount = qs<HTMLInputElement>(document, '#swap-amount')
 const swapSlippage = qs<HTMLInputElement>(document, '#swap-slippage')
 const swapQuote = qs<HTMLDivElement>(document, '#swap-quote')
 const swapSubmit = qs<HTMLButtonElement>(document, '#swap-submit')
-const swapStatus = qs<HTMLSpanElement>(document, '#swap-status')
+const swapStatus = qs<HTMLDivElement>(document, '#swap-status')
 
 const addForm = qs<HTMLFormElement>(document, '#add-form')
 const addAmount0 = qs<HTMLInputElement>(document, '#add-amount0')
@@ -93,14 +97,14 @@ const addAmount1 = qs<HTMLInputElement>(document, '#add-amount1')
 const addSlippage = qs<HTMLInputElement>(document, '#add-slippage')
 const addQuote = qs<HTMLDivElement>(document, '#add-quote')
 const addSubmit = qs<HTMLButtonElement>(document, '#add-submit')
-const addStatus = qs<HTMLSpanElement>(document, '#add-status')
+const addStatus = qs<HTMLDivElement>(document, '#add-status')
 
 const removeForm = qs<HTMLFormElement>(document, '#remove-form')
 const removeLp = qs<HTMLInputElement>(document, '#remove-lp')
 const removeSlippage = qs<HTMLInputElement>(document, '#remove-slippage')
 const removeQuote = qs<HTMLDivElement>(document, '#remove-quote')
 const removeSubmit = qs<HTMLButtonElement>(document, '#remove-submit')
-const removeStatus = qs<HTMLSpanElement>(document, '#remove-status')
+const removeStatus = qs<HTMLDivElement>(document, '#remove-status')
 const poolGate = qs<HTMLParagraphElement>(document, '#pool-gate')
 const poolStats = qs<HTMLElement>(document, '#pool-stats')
 const poolBoot = qs<HTMLElement>(document, '#pool-boot')
@@ -136,30 +140,16 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
-/**
- * Braille frames for the wait spinner.
- *
- * Eight-dot cells, because the cell a font draws has four rows: a spinner whose
- * frames only set dots 1 to 6 rotates in the top three rows and leaves the
- * fourth empty. These frames sweep every dot, so the rotation fills the cell.
- */
-const BOOT_FRAMES = ['⣾', '⣽', '⣻', '⢿', '⡿', '⣟', '⣯', '⣷']
-let bootTimer: number | null = null
+/** The shared braille sweep, running in the boot glyph. */
+let stopBoot: (() => void) | null = null
 
 function startBootLoader(): void {
-  if (bootTimer !== null) return
-  let frame = 0
-  bootTimer = window.setInterval(() => {
-    frame = (frame + 1) % BOOT_FRAMES.length
-    setText(poolBootGlyph, BOOT_FRAMES[frame])
-  }, 90)
+  stopBoot ??= startSpinner(poolBootGlyph)
 }
 
 function stopBootLoader(): void {
-  if (bootTimer !== null) {
-    window.clearInterval(bootTimer)
-    bootTimer = null
-  }
+  stopBoot?.()
+  stopBoot = null
 }
 
 /**
@@ -297,6 +287,8 @@ async function loadState(): Promise<void> {
 function renderSummary(): void {
   if (!currentState || !record) return
   const state = currentState
+  const removeLabel = document.querySelector('label[for="remove-lp"]')
+  if (removeLabel) removeLabel.textContent = `LP tokens (${lpSymbol()})`
   const split = feeSplit(state.fees.lpFeeBps, state.fees.protocolFeeShareBps)
   setText(statFee, split.effective)
   // The swapper pays the LP fee tier; the protocol's cut is inside it, so the
@@ -356,7 +348,7 @@ function renderPoolStats(): void {
   setText(
     statApr,
     pool.fee_apr_window_secs > 0
-      ? `${formatRate(pool.fee_apr)} over ${formatDuration(pool.fee_apr_window_secs)}`
+      ? `${formatRate(feeAprOneDay(pool.fee_apr, pool.fee_apr_window_secs))} · 24h`
       : '—',
   )
   // One line per side: on one line the pair wraps and the second amount is lost.
@@ -696,18 +688,62 @@ function trimFraction(value: string, maxFractionDigits = 6): string {
 
 function populateSwapSide(): void {
   if (!currentState || !record) return
+  // Option values must be the ids the autocomplete's source uses, or choosing
+  // from the dropdown sets the select to a value no option has, which clears
+  // it. Both sides are `normalizeHex` ids.
+  const token0 = normalizeHex(currentState.token0FaucetId.toString())
+  const token1 = normalizeHex(currentState.token1FaucetId.toString())
   // Rebuilding the options would reset the browser's selection to the first
   // side on every state refresh, including the poll after a confirmed swap.
   const selected = swapSide.value
   clear(swapSide)
   swapSide.append(
-    el('option', { value: currentState.token0FaucetId.toString() }, record.token0Symbol),
-    el('option', { value: currentState.token1FaucetId.toString() }, record.token1Symbol),
+    el('option', { value: '' }, 'Select token'),
+    el('option', { value: token0 }, record.token0Symbol),
+    el('option', { value: token1 }, record.token1Symbol),
   )
-  if (selected && swapSide.querySelector(`option[value="${selected}"]`)) {
-    swapSide.value = selected
+  const kept = [...swapSide.options].some((option) => option.value === selected) ? selected : ''
+  // Default to token0 -> token1, so the form quotes as soon as an amount is
+  // typed. Choosing token1 swaps the other way.
+  swapSide.value = kept || token0
+  swapSideCombo.refresh()
+  if (swapSide.value !== selected) renderBalanceLines()
+}
+
+/** The pool's two tokens, as the shared token autocomplete wants them. */
+function swapSideSource(): TokenSource {
+  if (!currentState || !record) {
+    return { entries: [], emptyNote: 'Loading the pool…' }
+  }
+  return {
+    entries: [
+      [
+        normalizeHex(currentState.token0FaucetId.toString()),
+        { symbol: record.token0Symbol, decimals: record.token0Decimals },
+      ],
+      [
+        normalizeHex(currentState.token1FaucetId.toString()),
+        { symbol: record.token1Symbol, decimals: record.token1Decimals },
+      ],
+    ],
   }
 }
+
+const swapSideCombo = mountTokenCombo(
+  swapSideInput,
+  swapSide,
+  swapSideSource,
+  (id) => {
+    if (!record) return shortHex(id)
+    return normalizeHex(record.token0FaucetId.toString()) === normalizeHex(id)
+      ? record.token0Symbol
+      : record.token1Symbol
+  },
+  () => {
+    renderSwapQuote()
+    renderBalanceLines()
+  },
+)
 
 /* Tabs: hash-based, no client-side router. */
 
@@ -785,9 +821,24 @@ function setupForms(): void {
   attachAmountControls(
     removeLp,
     () => poolIdHex,
-    () => 'LP',
+    () => lpSymbol(),
     () => 0,
   )
+}
+
+/**
+ * The LP token's symbol, as the pool account's faucet metadata names it. The
+ * pool is its own LP faucet, so a wallet and this page agree on the name.
+ */
+function lpSymbol(): string {
+  if (!record?.token0Symbol || !record?.token1Symbol) return 'LP'
+  try {
+    return lpTokenSymbol(record.token0Symbol, record.token1Symbol)
+  } catch {
+    // A token symbol without an A-Z letter cannot derive one; the account has
+    // the same fallback.
+    return 'LP'
+  }
 }
 
 /* Balances and amount shortcuts. */
@@ -860,7 +911,10 @@ function renderBalanceLines(): void {
 }
 
 function currentSide(): 0 | 1 {
-  return currentState && currentState.token0FaucetId.toString() === swapSide.value ? 0 : 1
+  if (!currentState) return 1
+  return normalizeHex(currentState.token0FaucetId.toString()) === normalizeHex(swapSide.value)
+    ? 0
+    : 1
 }
 
 function currentSideFaucetId(): string | null {
@@ -925,9 +979,13 @@ function slippageInput(input: HTMLInputElement): bigint {
 function renderSwapQuote(): void {
   clear(swapQuote)
   if (!currentState || !record || !loadedXykModule) return
+  if (!swapSide.value) {
+    swapQuote.append(el('p', { class: 'muted' }, 'Pick a token to see the quote.'))
+    return
+  }
   const { amountOut, applySlippage } = loadedXykModule
   const state = currentState
-  const side = currentState.token0FaucetId.toString() === swapSide.value ? 0 : 1
+  const side = currentSide()
   const decimalsIn = side === 0 ? record.token0Decimals : record.token1Decimals
   const decimalsOut = side === 0 ? record.token1Decimals : record.token0Decimals
   const symbolIn = side === 0 ? record.token0Symbol : record.token1Symbol
@@ -1031,8 +1089,12 @@ function renderAddQuote(): void {
     const minLp = applySlippage(quote.liquidityToUser, slippageBps)
 
     const lines: Node[] = [
-      el('p', {}, `LP you receive: ${quote.liquidityToUser.toString()}`),
-      el('p', {}, `Minimum LP (slippage ${slippageBps} bps): ${minLp.toString()}`),
+      el('p', {}, `${lpSymbol()} you receive: ${quote.liquidityToUser.toString()}`),
+      el(
+        'p',
+        {},
+        `Minimum ${lpSymbol()} (slippage ${slippageBps} bps): ${minLp.toString()}`,
+      ),
     ]
     if (state.lpSupply === 0n) {
       lines.push(
@@ -1062,7 +1124,9 @@ function renderRemoveQuote(): void {
   const state = currentState
 
   if (!removeLp.value) {
-    removeQuote.append(el('p', { class: 'muted' }, 'Enter an LP amount to see the quote.'))
+    removeQuote.append(
+      el('p', { class: 'muted' }, `Enter a ${lpSymbol()} amount to see the quote.`),
+    )
     return
   }
 
@@ -1183,15 +1247,19 @@ function refreshBeforeAction(): Promise<PoolState> {
 }
 
 async function doSwap(): Promise<void> {
+  if (!swapSide.value) {
+    toast('Pick the token to pay.', 'error')
+    return
+  }
+  primeSound()
   const sender = await senderAccountId()
   setBusy(swapSubmit, swapStatus, 'Submitting…')
   try {
     await syncWallet()
     const before = await refreshBeforeAction()
-    const state = currentState as PoolState
     const { AccountId } = await sdkModule()
     const tokenIn = AccountId.fromHex(withHexPrefix(swapSide.value))
-    const side = state.token0FaucetId.toString() === swapSide.value ? 0 : 1
+    const side = currentSide()
     const decimalsIn = side === 0 ? record!.token0Decimals : record!.token1Decimals
     const output = await (await poolHandle()).swap({
       sender,
@@ -1204,6 +1272,7 @@ async function doSwap(): Promise<void> {
     const txId = await submitViaWallet(output.request)
     setText(swapStatus, `Submitted ${shortHex(txId)}; confirming…`)
     const { txHash } = await waitForTransaction(txId)
+    playArrivalBell()
     toast(`Swap confirmed: ${shortHex(txHash)}`)
     watchUntilChanged(before, swapStatus)
   } catch (error) {

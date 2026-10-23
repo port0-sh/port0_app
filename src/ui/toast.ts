@@ -9,6 +9,11 @@ export type ToastKind = 'info' | 'error'
 
 const DEFAULT_TTL_MS = 6000
 
+/**
+ * Shows a toast. A positive `ttlMs` removes it after that long; `0` makes it
+ * stay until the user closes it, which is what a wallet error needs: the text
+ * can be long, and it may be the only record of what the extension said.
+ */
 export function toast(
   message: string,
   kind: ToastKind = 'info',
@@ -22,9 +27,24 @@ export function toast(
   const node = el(
     'div',
     { class: `toast${kind === 'error' ? ' error' : ''}`, role: 'status' },
-    message,
+    el('span', {}, message),
   )
+  if (ttlMs > 0) {
+    setTimeout(() => node.remove(), ttlMs)
+  } else {
+    node.append(
+      el(
+        'button',
+        {
+          type: 'button',
+          class: 'btn toast-close',
+          'aria-label': 'Dismiss',
+          onclick: () => node.remove(),
+        },
+        '×',
+      ),
+    )
+  }
   root.append(node)
-  setTimeout(() => node.remove(), ttlMs)
   return node
 }

@@ -37,9 +37,10 @@ import { CONFIG } from '../lib/config'
 import { qs, setText } from '../lib/dom'
 import { DEFAULT_LP_FEE_BPS } from '../lib/fees'
 import type { RegistryFeePolicy } from '@port0.sh/sdk'
-import { formatBps, isHexId, shortHex, withHexPrefix } from '../lib/format'
+import { formatBps, isHexId, normalizeHex, shortHex, withHexPrefix } from '../lib/format'
+import { fetchPools } from '../lib/indexer'
 
-import { mountSiteChrome } from '../lib/site'
+import { mountSite } from '../lib/site'
 import { toast } from '../ui/toast'
 import { mountWallet } from '../wallet/ui'
 import { mountTokenPicker } from '../features/tokenPicker'
@@ -55,14 +56,6 @@ import {
 const NOTE_KINDS: readonly PoolNoteKind[] = ['mint', 'burn', 'swap', 'collect']
 
 /**
- * Protocol maximum transaction fee, in fee-asset base units: base fee 7 x
- * (ilog2(MAX_TX_EXECUTION_CYCLES = 2^29) + 1) = 210. Every pool note kind is
- * priced at this value, so the prepaid sponsorship always covers the actual
- * transaction fee and a later collect sweeps the surplus.
- */
-const NOTE_FEE_BASE_UNITS = 210n
-
-/**
  * Measured 0.17 testnet fee for the deploy consume (a P2ID note): 133 base
  * units, which covers it with a small surplus a later collect sweeps. Also the
  * per-transaction unit for the faucet funding note (consume + mint).
@@ -75,23 +68,56 @@ const TX_FEE_BASE_UNITS = 133n
 const POOL_FUNDING_AMOUNT = Number(TX_FEE_BASE_UNITS)
 
 mountWallet()
-mountSiteChrome()
-
-/* Launchpad. */
-
+mountSite()
 
 /* Pool parameters. */
 
 
-// Wallet-token pickers; the text inputs stay the source of truth. Mounted for
-// their controls: the selection updates the inputs directly.
-const token0Picker = mountTokenPicker('param-token0-select')
-const token1Picker = mountTokenPicker('param-token1-select')
-
-// Prevent picking the same token twice: each select disables the option the
-// other one has selected.
 const token0Select = qs<HTMLSelectElement>(document, '#param-token0-select')
 const token1Select = qs<HTMLSelectElement>(document, '#param-token1-select')
+
+// Wallet-token pickers; the text inputs stay the source of truth. Mounted for
+// their controls: the selection updates the inputs directly. Each field's
+// dropdown excludes the token the other field holds, so the same faucet cannot
+// be picked twice.
+/** Ids of accounts that are pools. A pool account is its own LP faucet. */
+const poolFaucets = new Set<string>()
+
+async function loadPoolFaucets(): Promise<void> {
+  if (CONFIG.indexerUrl.length === 0) return
+  try {
+    let cursor: string | null = null
+    for (let page = 0; page < 5; page += 1) {
+      const result = await fetchPools(CONFIG.indexerUrl, { cursor, limit: 200 })
+      for (const pool of result.pools) poolFaucets.add(normalizeHex(pool.id))
+      cursor = result.nextCursor
+      if (cursor === null) break
+    }
+  } catch (error) {
+    console.warn(
+      '[indexer] pool list failed; LP tokens may appear in the token pickers:',
+      error,
+    )
+  }
+}
+
+const token0Picker = mountTokenPicker('param-token0-select', {
+  exclude: () => token1Select.value || null,
+  isPoolFaucet: (hexId) => poolFaucets.has(hexId),
+})
+const token1Picker = mountTokenPicker('param-token1-select', {
+  exclude: () => token0Select.value || null,
+  isPoolFaucet: (hexId) => poolFaucets.has(hexId),
+})
+
+// The pool list can arrive after the wallet's tokens; repopulate when it does.
+void loadPoolFaucets().then(() => {
+  token0Picker.refresh()
+  token1Picker.refresh()
+})
+
+// Belt and braces: the select's own option is disabled too, which is what a
+// restored draft or a scripted fill can still trip over.
 function syncTokenExclusion(): void {
   for (const option of token0Select.options) {
     option.disabled = token1Select.value !== '' && option.value === token1Select.value
@@ -115,7 +141,7 @@ const deployError = qs<HTMLParagraphElement>(document, '#deploy-error')
 const deployButton = qs<HTMLButtonElement>(document, '#deploy-button')
 const retryButton = qs<HTMLButtonElement>(document, '#retry-button')
 const restartButton = qs<HTMLButtonElement>(document, '#restart-button')
-const deployStatus = qs<HTMLSpanElement>(document, '#deploy-status')
+const deployStatus = qs<HTMLDivElement>(document, '#deploy-status')
 const deployResult = qs<HTMLParagraphElement>(document, '#deploy-result')
 const deployResultLink = qs<HTMLAnchorElement>(document, '#deploy-result-link')
 
@@ -253,9 +279,17 @@ async function readParams(): Promise<PoolParams> {
   // On 0.17 the network-note fee faucet must be the chain's own, so it is
   // read from the client, not from user input.
   const feeFaucet = await (await getClient()).feeFaucetId()
-  // Every note kind is priced at the protocol maximum; not user-settable.
+  // The pool's fee schedule: the SDK's measured prices per note kind. Read
+  // lazily so the SDK's WASM payload stays out of the initial parse. `NOTE_FEES`
+  // lands in @port0.sh/sdk 0.3.0; against an older SDK this refuses rather than
+  // installing a zero-fee schedule.
+  const sdk = await xykModule()
+  const noteFeeSchedule = (sdk as { NOTE_FEES?: Record<PoolNoteKind, bigint> }).NOTE_FEES
+  if (!noteFeeSchedule) {
+    throw new Error('Pool creation needs @port0.sh/sdk 0.3.0 or newer (NOTE_FEES is missing).')
+  }
   const noteFees: PoolNoteFees = Object.fromEntries(
-    NOTE_KINDS.map((kind) => [kind, NOTE_FEE_BASE_UNITS]),
+    NOTE_KINDS.map((kind) => [kind, noteFeeSchedule[kind]]),
   )
   const lpFeeBps = selectedFeeTierBps()
   const registryId = await parseAccountRef(CONFIG.registryId, 'Registry account id')
@@ -352,6 +386,10 @@ async function run(): Promise<void> {
       const poolAccount = await xyk.createPoolAccount({
         token0Key: fungibleAssetIdWord(params.token0),
         token1Key: fungibleAssetIdWord(params.token1),
+        // The pool is its own LP faucet; these two name the LP token wallets
+        // read (symbol `PO` plus each side's first five letters).
+        token0Symbol: token0Meta.symbol,
+        token1Symbol: token1Meta.symbol,
         registryId: params.registryId,
         lpFeeBps: BigInt(params.lpFeeBps),
         protocolFeeShareBps: BigInt(params.protocolFeeShareBps),
