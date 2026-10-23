@@ -21,7 +21,9 @@ npm test
 npm run lint
 ```
 
-Node 20 or later. `VITE_NETWORK` selects the chain at build time.
+Node 20 or later. `VITE_NETWORK` selects the chain at build time, so one checkout
+holds one deployment: to build for two chains, build twice into separate output
+directories.
 
 ## Configuration
 
