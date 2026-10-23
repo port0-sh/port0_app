@@ -1,417 +1,166 @@
 # port0.sh app
 
-Static web application for the port0.sh constant-product AMM on Miden. Users
-browse pools, swap, deposit and withdraw liquidity, and create pools. There is
-no application framework and no client-side page router: each page is a real
-HTML document with its own metadata, its own module entry, and a minimal amount
-of TypeScript. A separate swap router ranks multihop routes over the indexed
-pools.
+Static web application for the port0.sh constant-product AMM on Miden: browse
+pools, swap, provide liquidity, launch a pool, and launch a fixed-supply token.
 
-## Pages
+A six-page MPA, no client-side router and no framework. The Miden SDK and the
+`@port0.sh/sdk` load on demand, so the pages paint and the pool list renders
+without the WASM stack.
 
-| Route                    | File           | Purpose                                                       |
-| ------------------------ | -------------- | ------------------------------------------------------------- |
-| `/`                      | `index.html`   | Browse every registered pool from the indexer                 |
-| `/pool.html?id=<poolid>` | `pool.html`    | Pool state, swap, add liquidity, remove liquidity             |
-| `/create.html`           | `create.html`  | Deploy a pool and register it                                 |
-| `/about.html`            | `about.html`   | What port0 is, and the risk notice                            |
-| `/utils.html`            | `utils.html`   | One-time mint and send public note                            |
-| `/media.html`            | `media.html`   | Mark, wordmark, colors, type, and the unfurl image            |
+Status: unaudited, closed alpha. Pools and their notes are public network accounts.
 
-Every page carries the same parts: the alpha notice as a strip above the
-header, the footer with the copyright year and the social links, and the chart
-attribution. The strip shows the text of the selected network. On testnet it is
-dismissible, remembered under `port0-app:alpha-risk:v1:testnet`. On mainnet the
-strip is permanent and the first visit is gated by a modal that records
-acceptance under `port0-app:alpha-risk:v1:mainnet`. The index
-adds the hero drawing, the brand heading under it, a link to the launch page, and
-the slogan.
-
-Pool ids are canonical account-id hex strings (`AccountId.toString()`), with
-or without a `0x` prefix.
-
-## Development
+## Run
 
 ```sh
 npm install
-npm run dev        # dev server with same-origin gRPC-web RPC proxy
-npm test           # vitest, pure-logic unit tests
-npm run typecheck  # tsc --noEmit
-npm run lint       # oxlint
-npm run build      # tsc -b && vite build → dist/
-npm run preview    # serve dist/ locally
+npm run dev        # Vite dev server on :5173
+npm run build      # tsc -b && vite build into dist/
+npm run preview
+npm run typecheck
+npm test
+npm run lint
 ```
 
-The build output is plain static files (`dist/`): six HTML documents, one
-CSS file, one small JS bundle per page, and a shared lazy chunk containing the
-Miden SDK. Deploy `dist/` to any static file host.
-
-## Running the stack
-
-See the [runbook](https://docs.port0.sh/operations/runbook.html). It covers the
-one-time operator setup (contracts, SDK artifacts, pool code commitment,
-registry, indexer, app), deploying a pool through the app, deploying a pool
-programmatically, and the failure conditions.
-
-In short, from a fresh checkout: build the contracts, build the SDK and run
-`npm run pool:commitment`, run `npm run registry:deploy` (fund the operator
-address it prints, then run again), start the indexer with
-`PORT0_REGISTRY_ID` set, then start the app with `VITE_REGISTRY_ID` and
-`VITE_INDEXER_URL` set. The browser fetches the indexer cross-origin in
-development, so the indexer's `INDEXER_ALLOWED_ORIGINS` must list the dev app
-origin; the indexer's `.env.example` already lists the Vite ports.
+Node 20 or later. `VITE_NETWORK` selects the chain at build time.
 
 ## Configuration
 
-Environment variables are read at build time (`import.meta.env`):
+Every value is read from the environment at build time; `.env.example` lists them
+with their defaults. The network name selects these defaults, and any of them can
+be overridden individually.
 
-| Variable                       | Default                        | Meaning                                    |
-| ------------------------------ | ------------------------------ | ------------------------------------------ |
-| `VITE_NETWORK`                 | `testnet`                      | `testnet`, `devnet`, `localnet`, or `mainnet`; an unknown value fails the build |
-| `VITE_MIDEN_RPC_URL`           | per network                    | Miden node RPC for on-chain reads          |
-| `VITE_CHAIN_FEE_FAUCET_ID`     | per network                    | Faucet of the chain's fee asset            |
-| `VITE_PROVER_URL`              | per network                    | `local`, `testnet`, `devnet`, or a remote prover URL |
-| `VITE_NOTE_TRANSPORT_URL`      | per network                    | `testnet`, `devnet`, or a remote transport URL, for private notes |
-| `VITE_EXPLORER_URL`            | per network                    | Block explorer base; account ids are appended |
-| `VITE_PROTOCOL_FEE_RECIPIENT`  | (empty)                        | Platform fee recipient, displayed and required for creation; the on-chain destination lives in the registry |
-| `VITE_REGISTRY_ID`             | (empty)                        | On-chain pool registry account; empty skips registration |
-| `VITE_REGISTRY_REGISTER_FEE`   | `0`                            | Register note consumption fee, in the registry's fee asset; must match the registry's note fee schedule |
-| `VITE_INDEXER_URL`             | (empty)                        | Indexer base URL; empty disables browsing and the pool page |
-| `VITE_PARA_API_KEY`            | (empty)                        | Para API key; empty keeps the Para option disabled |
-| `VITE_PARA_ENVIRONMENT`        | `BETA`                         | Para environment; `PRODUCTION` for production builds |
-| `VITE_BRAND_*`                 | see [Branding](#branding)      | Wordmark, mark text, slogan, and unfurl metadata |
+| `VITE_NETWORK` | RPC | Fee faucet | Fees in real funds |
+| --- | --- | --- | --- |
+| `testnet` | `https://rpc.testnet.miden.io` | `0x4cbdcaff…6436` | no |
+| `devnet` | `https://rpc.devnet.miden.io` | — | no |
+| `localnet` | `http://localhost:57291` | — | no |
+| `mainnet` | `https://rpc.cedar.miden.io` | `0xe69e6ca6…9feb` | yes, gated by the risk notice |
 
-`VITE_PROTOCOL_FEE_RECIPIENT` accepts a hex account id or a bech32 address.
-It gates pool creation on the create page. The pool's actual protocol fee
-destination is `protocol_fee_to` in the registry; the create page reads the
-registry's fee policy and builds the pool with the registry's rate.
+An unrecognised name fails the build. On a network with real funds the first visit
+shows a blocking risk notice, accepted under `port0-app:alpha-risk:v1:<network>`.
 
-`VITE_REGISTRY_ID` accepts a hex account id or a bech32 address. When set,
-the create flow emits a register note after the pool is deployed. The
-register note is a network note consumed by the registry account; registration
-is asynchronous, the wallet confirms emission and the node's transaction
-builder consumes the note in a later block. `VITE_REGISTRY_REGISTER_FEE` must
-match the registry's note fee schedule.
+`VITE_REGISTRY_ID` names the on-chain registry; the app reads its protocol fee
+destination, share, allowed LP tiers, and register price from it. `VITE_INDEXER_URL`
+names the pool source. Both are required for a usable deployment; the app degrades
+to "no pools" without the indexer.
 
-`VITE_INDEXER_URL` is the application's pool source. The home page lists every
-pool the indexer serves, and the pool page loads its state and configuration
-from it. The indexer reads the on-chain registry for the pool set and each
-pool account for reserves, token metadata, and the network note fee schedule.
-An empty value disables browsing and the pool page.
+## Pages
 
-## Networks
-
-| Value | testnet | mainnet | devnet | localnet |
-| --- | --- | --- | --- | --- |
-| RPC | `https://rpc.testnet.miden.io` | `https://rpc.cedar.miden.io` | `https://rpc.devnet.miden.io` | `http://localhost:57291` |
-| Fee faucet | `0x4cbdcaffe75f0a317482224dae6436` | `0xe69e6ca6e39df1b10c1e5399399feb` | (set explicitly) | (set explicitly) |
-| Prover | `testnet` | `https://tx-prover.cedar.miden.io` | `devnet` | `local` |
-| Note transport | `testnet` | `https://transport.cedar.miden.io` | `devnet` | `local` |
-| Explorer | `https://testnet.midenscan.com/account` | `https://explorer.cedar.miden.io/account` | `https://explorer.devnet.miden.io/account` | (none) |
-
-The chain is selected by name, not by a boolean. `VITE_NETWORK` takes
-`testnet`, `devnet`, `localnet`, or `mainnet`; an unrecognised value throws at
-build time rather than silently pointing a deployment at the wrong chain. Each
-entry also carries the chain's own network id, which decides an address's bech32
-prefix, and whether real funds are at stake, which gates the blocking risk
-notice.
-
-The node sends the CORS headers a browser needs, so development and builds talk
-to the RPC directly; no proxy is involved. The registry id, the pool code
-commitment, and the protocol fee recipient are deployed per network and are not
-defaults. The mainnet endpoints were read from the partner network on 2026-10-22.
+| Page | Path | Contents |
+| --- | --- | --- |
+| Pools | `/` | Swap card, protocol stats, pool table |
+| Pool | `/pool.html?id=<pool id>` | Pool state, chart, swap, add and remove liquidity |
+| Launch | `/create.html` | Token selection, fee tier, pool creation and registration |
+| Utils | `/utils.html` | Token launch, registry fee, public note |
+| About | `/about.html` | |
+| Media | `/media.html` | |
 
 ## Architecture
 
-```
-index.html  pool.html  create.html  about.html   one real HTML entry per page
-src/styles/global.css                            hand-written stylesheet
-src/assets/branding/                             hero.html and logo.html drawings
-src/lib/
-  brand.ts      branding env values
-  client.ts     lazy MidenClient/XykClient singletons (SDK loads on first use)
-  config.ts     resolved runtime configuration
-  chart.ts      TradingView lightweight-charts candlesticks, imported on demand
-  dom.ts        el()/qs()/clear() DOM helpers
-  fees.ts       LP fee tiers and the measured deploy fees
-  format.ts     bigint-exact amount parsing/formatting, id shortening, bps
-  history.ts    exact price ratios and chart series (tested)
-  indexer.ts    pool source: indexer fetch plus fee-schedule root mapping
-  multihop.ts   hop-by-hop swap execution through the wallet
-  network.ts    wallet network name and the chain's bech32 network id
-  router.ts     multihop route selection over the indexed pools (tested)
-  site.ts       footer year, the alpha notice, and the mainnet gate
-  sound.ts      the completion bell, synthesized with Web Audio
-  state.ts      ~30-line pub/sub store; the entire state layer
-  token.ts      fixed-supply token validation
-src/features/
-  oneTimeMint.ts    fixed-supply token launcher
-  registryAdmin.ts  register fee panel, admin only
-  sendPublicNote.ts public-note sender
-  tokenPicker.ts    wallet-token picker with a manual fallback
-src/ui/
-  spinner.ts    the loading spinner
-  toast.ts      notification stack
-  modal.ts      native <dialog> wrapper
-src/wallet/
-  wallet.ts     unified wallet facade (Bread wired; Para gated)
-  ui.ts         header connect button, wallet picker, address chip
-src/pages/
-  home.ts       pool table and the swap card, 15 s refresh while visible
-  pool.ts       state summary, quotes, swap/add/remove, history chart
-  create.ts     pool deployment and registration
-  about.ts      static page; mounts the wallet control and footer
-  media.ts      static page; mounts the wallet control and footer
-  utils.ts      one-time mint, registry admin, and send public note
-```
+| Module | Responsibility |
+| --- | --- |
+| `lib/config.ts` | Resolved configuration and the per-network defaults |
+| `lib/network.ts` | Wallet network name and the chain's bech32 network id |
+| `lib/client.ts` | Lazy `MidenClient` and `XykClient` singletons; SDK loads on first use |
+| `lib/indexer.ts` | Pool list, history, status, fee-schedule root mapping |
+| `lib/router.ts` | Route enumeration over the indexed reserves, pure `bigint` |
+| `lib/multihop.ts` | Hop-by-hop execution through the wallet |
+| `lib/fees.ts` | LP fee tiers, the measured deploy fees, fee-to-APR |
+| `lib/history.ts` | Price ratios and chart series |
+| `lib/chart.ts` | TradingView lightweight-charts, imported on demand |
+| `lib/format.ts` | Exact `bigint` amounts, bps, id shortening |
+| `lib/token.ts` | Fixed-supply token validation |
+| `lib/state.ts` | The pub/sub store |
+| `lib/dom.ts` | `el`, `qs`, `clear`, `setText` |
+| `lib/site.ts` | Footer, alpha notice, risk gate, sound toggle |
+| `lib/sound.ts` | Arrival bell |
+| `wallet/wallet.ts` | Bread adapter facade: connect, submit, sync, reads |
+| `wallet/ui.ts` | Login button, account menu, wallet picker |
+| `ui/` | `modal`, `toast`, `spinner`, `tokenCombo` |
+| `pages/` | One module per HTML entry |
+| `features/` | Token launch, registry fee, public note, wallet token picker |
 
-The home page's table never loads the SDK: it renders from the indexer, and
-`toPoolView` is called without note-fee mapping. The swap card and the
-`multihop.ts` runner do load the SDK, on the first swap. The Login button is
-plain HTML plus
-a light module; the wallet adapter and the WASM stack behind it load on first
-connect. `pool.html` and `create.html` load the SDK lazily on first use, so
-every page shell renders without WASM on the critical path.
+## Wallet
 
-## Pool registry
+Login goes through the Bread adapter. The extension holds the authorization, so the
+app stores only the authorized address under `port0-app:wallet-session:v1` and
+re-drives the handshake on load. A handshake that never settles is bounded at 20 s,
+its stuck state is cleared so a retry works, and wallet errors appear in the console
+and in a toast that stays until dismissed.
 
-Pools come from the on-chain registry. The registry account holds three
-storage maps: the accepted pool code commitments, the pool set, and the
-ordered asset pair index. A pool is registered by a register note emitted by
-the creator after the pool is deployed; the node's transaction builder
-consumes it against the registry, and the registry verifies the pool code
-commitment and the pool's registry identity by foreign procedure invocation
-against the pool's `CodeInspection` component and `get_registry_identity`
-procedure.
+The app cannot execute for a wallet account: it holds no key. Every write is a
+`TransactionRequest` built by the SDK and handed to the wallet, which signs,
+submits, and confirms.
 
-The SDK performs registration (`registerPool`), and the indexer polls the
-registry for the pool set. The app reads everything from the indexer: pool
-ids, reserves, token metadata, and the network note fee schedule. There is no
-local pool list and no manual import.
+## Pools
 
-The indexer derives token metadata from each faucet's `token_config` slot and
-the note fee schedule from the pool's network account: the `fee_asset_id`
-value slot and the `basic_constant_fee` fee schedule map. The app maps the
-schedule roots to note kinds through the SDK's compiled note scripts.
+The pool list comes from the indexer, which polls the registry and each pool. The
+table shows pair, price, both reserves, 24 h volume, and LP fee; it filters on
+symbols, pair, and ids, sorts by column, and pages at 10, 25, or 50 rows. The page
+size is remembered under `port0-app:page-size`.
 
-## Pool list
+A pool is registered by a register note the creator's wallet emits after the pool
+is deployed. The registry verifies the pool on chain before listing it: its code
+commitment, its identity, its six auth storage roots, and that its payout script is
+the standard P2ID root. A pool whose allowlist, fee asset, fee policy, or payout
+script differs from the registry's is rejected.
 
-The home page loads every pool the indexer serves, in indexer pages of 200, and
-polls every 15 s while the tab is visible. Each row carries the pair and its
-short pool id, the price of one token0 in token1, both reserves, 24-hour volume
-in both tokens, the LP fee, and the fee yield, normalised to a 24-hour basis.
+## Swap
 
-Filtering, sorting, and paging run in the browser over the loaded set, so neither
-a filter nor a sort makes another request. The filter matches a symbol, a pair,
-or a faucet id. Sorting is by volume descending by default, and any column can be
-sorted in either direction. The pager offers 10, 25, or 50 rows, defaulting to
-10, and remembers the choice.
+`lib/router.ts` enumerates routes of up to three hops over distinct tokens and ranks
+them by output, preferring the direct pool at equal output. A quote comes from the
+indexer's last snapshot, so it is a quote, not a guarantee.
 
-The table needs no chain read and no WASM: prices come from the indexer's
-reserves through the same exact bigint arithmetic the pool page uses, and
-`toPoolView` is called without note-fee mapping, which is the only reason that
-module would import the SDK.
+`lib/multihop.ts` executes one wallet transaction per hop: the pool consumes the swap
+note and emits a P2ID note of the output token, which must reach the wallet before
+the next hop can spend it, and the next hop's input is the amount actually received.
+A failed hop reports its index and stage; a retry resumes there rather than
+resubmitting earlier hops.
 
-## Swap card
-
-The home page carries a swap card that quotes over the indexed pools without
-loading the SDK, then executes through the wallet one hop at a time.
-
-`src/lib/router.ts` enumerates routes up to three hops over distinct tokens and
-ranks them by output, with the direct pool preferred at equal output. Two pools
-cannot serve the same pair, so each hop has one pool. The quote uses the
-indexer's last snapshot, so it is a quote and not a guarantee.
-
-`src/lib/multihop.ts` runs the route. Each hop is its own wallet transaction:
-the pool consumes the swap note and emits a P2ID note of the output token to the
-sender, so the intermediate asset has to reach the wallet's vault before the next
-hop can spend it. The next hop's input is the amount the wallet actually
-received, so a reserve shift between hops changes only the final output. A
-failed hop reports its index, and a retry resumes at that hop. Each hop carries
-its own slippage bound.
-
-A completed swap rings a two-strike bell, synthesized with Web Audio. A browser
-only allows audio after a user gesture, so the audio context opens on the swap
-click.
+While a route runs, the status box shows the path with the hop the wallet is
+prompting for in bold, and keeps a receipt afterwards: swapped amount, rate, LP fee,
+price impact, per-hop amounts, transaction count, and the network fee. A completed
+swap rings the bell in `public/bell.mp3`; the toggle sits beside the wallet control
+and its state is `port0-app:sound:v1`.
 
 ## Pool page
 
-The pool page renders the state summary, the three action forms, and the
-indexer's sampled history. A pool is absent from the indexer between its
-registration transaction and the next registry poll, so the page waits instead
-of failing: it shows a spinner banner, re-fetches every 5 s, and loads the pool
-when it appears. After a minute it states that a pool which was never
-registered will not appear. While the page is open, pool metadata and history
-are re-read every 60 s.
+Three actions against one pool: swap either direction, add liquidity at the current
+ratio, and remove it. The page shows the pool's fee split, reserves, price, LP supply,
+and a price chart built from the indexer's history. LP amounts are shown with the LP
+token's own symbol, which the pool account carries as its faucet metadata.
 
-A confirmed action does not change the visible state immediately. The wallet
-confirms at its own block, the pool account changes in the next block, and the
-indexer samples within 15 s. After a swap, deposit, or withdrawal, the page
-therefore polls the chain state, wallet balances, the indexer record, and the
-history every 5 s for up to 60 s, and stops as soon as reserves or LP supply
-change.
+## Utils
 
-History comes from `GET /pools/{id}/history` at 1m, 5m, 1h, 6h, or 1d
-resolution and is drawn with TradingView's `lightweight-charts` as candlesticks with crosshair,
-price line, and a last-value label. The picker offers 1m, 5m, 1h, 6h, and 1d,
-which are the indexer's five retention tiers. The library is the largest dependency in
-the app and only this page uses it, so `src/lib/chart.ts` imports it on demand.
-Its attribution logo stays enabled: the licence requires an attribution notice
-and a link to tradingview.com.
-
-Each history bucket carries its opening state and its price extremes, so a
-candle's body is the move within the bucket and its wicks are the extremes the
-bucket touched. Prices are computed in bigint and scaled by 10^6 in
-`src/lib/history.ts`: a ratio of two u64 reserves is not representable as a JSON
-number even when each reserve is. `candles` orders the samples, drops a
-backfilled one, and clamps the extremes around the body, which the chart library
-requires. A sample whose `block_timestamp_last` is zero, which is what a pool
-that has never been operated on holds, is placed at its poll time. A table below
-the chart lists the 24 most recent samples.
-
-The pool page leads with the current price of one token0 in token1, computed
-by the contract's own formula against the chain state. Until the first chain
-read returns, the headline is filled from the indexer's reserves with the same
-ratio arithmetic, and the indexer never overrides a chain-derived price. The
-summary also carries the pool's yield and the fees its liquidity providers
-earned, both from the indexer's activity ring. The yield is the fees against the
-reserves that earned them, normalised to a 24-hour basis and labelled `24h`, so
-every pool reads on the same window.
-
-## Wallet menu
-
-The header shows a Login button until a wallet connects. Afterwards it shows the
-account id; pressing it opens a menu with one item, Disconnect.
-
-## Utils page
-
-The chain utilities live on their own page at `/utils.html`, in the top
-navigation. All three act through a wallet, so their buttons stay disabled until
-one connects.
-
-| Utility | What it does |
+| Tool | Effect |
 | --- | --- |
-| One-time mint | Creates a network faucet whose whole supply is minted once to the wallet by a launch note, with `maxSupply` equal to that supply and an immutable owner. Nothing can be minted afterwards |
-| Registry admin | Changes the registry's register fee. It reads the admin and the live fee from chain, refuses a wallet that is not the admin, and emits a `registry-config` note |
-| Send public note | Sends the chain fee asset through the wallet's own `requestSend` with a public note type, the only path that can target an account that does not exist on-chain yet |
+| Token launch | Creates a network faucet and launches its whole supply to the wallet once. No invitation code, because the faucet is a network account; the owner is immutable |
+| Registry fee | Reads the registry's admin and live register fee, refuses any other wallet, and emits the config note |
+| Public note | Sends the chain fee asset with a public note, the only form that can target an account that does not exist on chain yet |
 
-Each builds its form in a modal.
+## Fees
 
-## Branding
+The LP fee tier is one of 0.05%, 0.30%, or 1.00%, from the registry's allowed set.
+The protocol's share is carved out of that fee, not added to it, so the swapper pays
+the tier and the output does not depend on the share.
 
-The name and slogan are configuration; the two drawings are files:
+Network note fees are denominated in the chain's fee asset and priced per note kind:
+126 base units for the four pool notes, 119 for the registry notes and a token
+launch, 0 for the registry config note. A pool and the registry reserve the measured
+collect fee out of the fee asset so a sweep can pay its own transaction.
 
-| Item | Effect |
-| --- | --- |
-| `VITE_BRAND_NAME` | Wordmark, page titles, `og:site_name`, footer |
-| `VITE_BRAND_MARK_TEXT` | Text form of the mark, used in page titles |
-| `VITE_BRAND_LOGO_TEXT` | Text mark beside the header logo; falls back to the name |
-| `VITE_BRAND_SLOGAN` | One line under the home page name; empty hides it |
-| `VITE_BRAND_TAGLINE` | Unfurl title and image alt text |
-| `VITE_BRAND_DESCRIPTION` | Unfurl description and manifest description |
-| `VITE_BRAND_X_HANDLE` | X account, for `twitter:site` |
-| `src/assets/branding/hero.html` | The home page hero |
-| `src/assets/branding/logo.html` | The mark in the header of the other pages |
+## Limits
 
-Both drawings are injected as they stand. Nothing in the application parses or
-reassembles a drawing. A drawing may carry a `<style>` element, which is where
-its own motion belongs. `.banner-source` in `src/styles/global.css` holds the
-metrics a drawing needs to be legible at all, so no hero paints unstyled while
-its block is on the way; a drawing that wants other metrics declares them in its
-own block, which comes later and wins at equal specificity.
-
-An empty hero falls back to the logo, and an empty file leaves the markup the page
-shipped with. The defaults in `.env.example` are the brand's own: `port0.sh`, the
-text mark `port0`, and the slogan `The free port of Miden`.
-
-Artwork is rendered in the bundled `aahub_light` font, which is what gives
-Japanese ASCII art the character widths its authors assumed; its licences
-(monapo, SIL OFL 1.1; IPA Gothic, IPA Font License 1.0) travel with it in
-`public/fonts/`.
-
-## Pool operations
-
-All pool actions are notes to the pool account. The app builds the note and
-its FEE_SPONSORSHIP note through the port0 SDK with `submit: false`, then hands
-the resulting `TransactionRequest` to the connected wallet, which signs,
-submits, and reports confirmation.
-
-Quoting is local and exact: the SDK's contract math (`amountOut`, `quoteMint`,
-`quoteBurn`) runs against the latest fetched pool state. Slippage is a basis
-point bound in `[0, 9999]`; the quote is floored or capped by it. Deadlines
-are the maximum of the wall clock and the pool's last-seen block timestamp,
-plus one hour (`DEADLINE_MARGIN_SECONDS` in `src/pages/pool.ts`).
-
-The deploy step of pool creation is an exception: the pool is a network
-account without a key. The wallet sends a small chain fee asset note to the
-pool address, and the app's own client consumes that note as the pool's first
-transaction, which commits the account and pays its first fee. There is no
-scriptless deploy, because the network auth rejects a transaction with no
-effect.
-
-## Token minting
-
-The Utils page launches a fixed-supply token. The faucet is a network account, so
-creating it needs no invitation code on a gated network. It is created with
-`maxSupply` equal to the initial supply and an immutable owner; one launch note
-mints that whole amount to the caller's wallet. Nothing remains to mint
-afterwards, and the launch cannot be repeated. The faucet id can fill either
-token field of the create page's pool form.
-
-Funding: a fresh faucet has an empty vault and cannot pay the fee of its own
-first transaction, so the connected wallet sends 112 base units to the new
-faucet, the measured cost of a faucet deploy consume. That transaction consumes
-the funding note, which creates the faucet on chain. A faucet has no sweep, so the
-funding is the exact measured cost. The launch is a second transaction, paid by
-the owner's wallet through a fee sponsorship of 119 base units.
-
-Validation (see `src/lib/token.ts`): symbol 3-12 uppercase ASCII letters (the
-protocol rejects digits), an optional name up to 32 characters, decimals integer
-0-8, initial supply entered in tokens and bounded by the port0 contract's
-`MAX_AMOUNT` (2^57 base units; amounts are u64 with u128 intermediates and
-10,000 bps fee headroom).
-
-## Fee model
-
-LP fees follow Uniswap's three tiers: 0.05%, 0.30%, and 1.00%. The protocol's
-cut is a share of the LP fee, not a per-tier surcharge: the pool is built with
-`protocol_fee_share_bps` read from the registry, and the swapper pays the LP fee
-tier and nothing more. The registry's `register` procedure rejects a pool built
-with any other rate. `VITE_PROTOCOL_FEE_RECIPIENT` gates pool creation on the
-create page; the destination the pools pay is `protocol_fee_to` in the registry.
-
-Network note fees are denominated in the chain's fee asset, paid to the
-chain's own fee faucet (`VITE_CHAIN_FEE_FAUCET_ID`). This is not a choice:
-the node never runs network transactions for an account whose fee
-asset differs from the chain's protocol configuration, so the app reads the
-faucet from the client instead of asking the user. The creator's wallet must
-hold the chain fee asset to pay network note fees when acting on a pool
-afterwards.
-
-## Wallets
-
-Bread Wallet is wired through `@miden-sdk/miden-wallet-adapter-miden`; the
-wallet picker shows its detection state and opens the install page when the
-extension is missing. Para Wallet's packages are installed but the login
-flow is gated behind `VITE_PARA_API_KEY`: without a configured key the picker
-explains the dependency instead of failing later.
-
-The package versions are pinned in `package.json` and `package-lock.json`. Keep
-the `@miden-sdk/*` packages and `@port0.sh/sdk` on the versions the testnet
-runs.
-
-## Known limitations
-
-- Closed alpha. The app builds for testnet by default. `VITE_NETWORK` selects
-  testnet, devnet, localnet, or the Miden partner mainnet.
-- The indexer is required. An empty `VITE_INDEXER_URL` disables browsing and
-  the pool page.
-- Network note fees use the chain's own fee asset and faucet, a protocol rule;
-  the creator's wallet must hold the chain fee asset.
+- A pool cannot be paused, upgraded, or reconfigured. Its parameters are initial
+  storage.
+- The app lists at most 1,000 pools, fetched in five pages; beyond that, filtering
+  and paging belong to the indexer.
+- Listing is permissionless and the registry vets no token: a creator can list a
+  mintable token and drain the pool's other side. Check a faucet before depositing.
 
 ## Source
 
-Radicle is the canonical source. GitHub is the mirror.
+Radicle is canonical; GitHub is a mirror.
 
 | Source | Location |
 | --- | --- |

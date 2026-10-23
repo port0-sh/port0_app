@@ -686,10 +686,6 @@ function onInputsChanged(): void {
 }
 
 /**
- * Refreshes the wallet-token set: the wallet's assets, kept only where an
- * indexed pool trades that faucet.
- */
-/**
  * Refreshes the wallet's tradable tokens. One run at a time: the store can
  * change many times while a refresh is in flight, and each failed wallet call
  * emits another change.

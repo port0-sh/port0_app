@@ -164,12 +164,13 @@ interface Acquired {
 }
 
 /**
- * Waits until the wallet holds at least `minimum` of `faucetId` beyond
- * `balanceBefore`, then returns the amount received.
+ * Waits for a hop's payout: accepts a pending note of the output faucet, or takes
+ * the balance delta when it already arrived.
  *
- * A pending P2ID note is accepted through the wallet. A note the user already
- * accepted in the wallet shows up as a balance and needs no consume, which is
- * what makes an interrupted route resumable.
+ * `minimum` comes from the quote taken before the hop ran, and the pool can
+ * legitimately pay less while respecting the request's own min-out, so a note of
+ * the right faucet counts even below it; the next hop's min-out bounds the
+ * continuation.
  */
 async function acquireIntermediate(
   faucetId: string,
@@ -186,13 +187,6 @@ async function acquireIntermediate(
     const received = held !== null && held > balanceBefore ? held - balanceBefore : 0n
     if (received >= minimum) return { amount: received }
 
-    // The gate above uses `minimum`, which comes from the route quote taken
-    // before the hop ran. Reserves move, so the pool can legitimately pay less
-    // than that quote while still respecting the request's own min-out. A note
-    // of the right faucet therefore counts as the hop's payout even below
-    // `minimum`; the hop's min-out already bounded the rate, and the next hop's
-    // min-out bounds the continuation. Waiting for a stale figure instead is an
-    // infinite wait on a payout that has arrived.
     const notes = await consumableNotes()
     let fallback: { note: (typeof notes)[number]; amount: bigint } | null = null
     for (const note of notes) {
@@ -212,17 +206,9 @@ async function acquireIntermediate(
         if (fallback === null || amount > fallback.amount) fallback = { note, amount }
         continue
       }
-      if (amount > BigInt(Number.MAX_SAFE_INTEGER)) {
-        throw new Error('The intermediate amount is too large for a wallet consume request.')
-      }
       return await acceptNote(note, amount, faucetId, wanted, onWait)
     }
 
-    // A payout of this faucet is in the wallet but below the stale quote: take
-    // the largest one. The hop executed under its own min-out, so a smaller
-    // figure is the pool's actual payment, not a shortfall; the next hop's
-    // min-out rejects a continuation that the amount cannot support, which is a
-    // clear error rather than an endless wait.
     if (fallback !== null) {
       return await acceptNote(fallback.note, fallback.amount, faucetId, wanted, onWait)
     }
@@ -241,14 +227,12 @@ async function acquireIntermediate(
 }
 
 /**
- * Executes `route` hop by hop. `pools` is the routing pool set the quote came
- * from; each hop's pool configuration (fee faucet, note fees) is read from it.
+ * Executes `route` hop by hop: one wallet transaction per hop, and an accepted
+ * payout note before the next hop can spend it.
  *
  * `startHop`, `startStage`, `startAmountIn`, and `startBalanceBefore` resume an
- * interrupted route at exactly the stage that failed: a cancelled wallet swap
- * resubmits, while a cancelled accept re-acquires the hop's output without
- * swapping again. `onHop` reports the hop, amount, prior balance, and stage as
- * the executor reaches them, so the caller can persist them for a retry.
+ * interrupted route at the stage that failed: a cancelled swap resubmits, a
+ * cancelled accept re-acquires the output without swapping again.
  */
 export async function executeRoute(options: {
   route: Route

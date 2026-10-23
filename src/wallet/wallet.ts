@@ -53,11 +53,9 @@ export const walletStore = createStore<WalletState>({
 
 let adapterPromise: Promise<MidenWalletAdapter> | null = null
 /**
- * A handshake in flight, resolving to whether the adapter ended up connected.
- * The session restore and a Login click can otherwise start two of them; the
- * adapter guards against that by resolving the second early, which reports
- * success before the connection exists. Never rejects, so a joiner can check
- * the store instead of inheriting the initiator's error.
+ * The handshake in flight, resolving to whether the adapter connected. A second
+ * caller joins it; the adapter answers a concurrent connect early, which reports
+ * success before the connection exists. Never rejects.
  */
 let connectInFlight: Promise<boolean> | null = null
 
@@ -345,15 +343,12 @@ export async function connect(kind: WalletKind): Promise<void> {
 }
 
 /**
- * Adopts the account the extension injected into the page.
+ * Adopts the account the extension injects once it grants access.
  *
- * The extension can grant the permission and set `address` on its injected
- * object while the response that would settle the adapter's handshake promise
- * never arrives (observed live: the extension showed the app as connected, the
- * page kept waiting, and a reload logged the user out). The adapter reads that
- * same object, so filling in what the adapter would have set is the only
- * recovery from a dropped response. The address only exists on the injected
- * object after the extension authorized this app.
+ * The extension can set `address` on its injected object while the response that
+ * settles the adapter's handshake never arrives. The adapter reads that same
+ * object, so filling in its fields is the only recovery from a dropped response.
+ * The address exists there only after the extension authorized this app.
  */
 function adoptInjectedAccount(adapter: MidenWalletAdapter): boolean {
   const injected = window as unknown as {
@@ -453,16 +448,13 @@ export async function disconnect(): Promise<void> {
 }
 
 /**
- * Submits a TransactionRequest built by the XYK SDK through the connected
- * wallet. Returns the wallet's transaction id, which names a transaction the
- * wallet accepted, not one that landed; poll waitForTransaction for that.
+ * Submits a pre-built request through the wallet and returns the wallet's
+ * transaction id, which names a transaction the wallet accepted, not one that
+ * landed; poll `waitForTransaction` for that.
  *
- * The wallet captures a ChainAnchor at its own sync height when it executes a
- * custom request, and validates the multisig summary against it. A 0.17
- * multisig summary binds the request's declared bound block, so the two agree
- * only when the wallet's sync height equals that block. The wallet account is
- * private, so the app cannot execute the request itself; keeping the wallet
- * synced to the app's bound block is the app-side lever.
+ * The wallet captures a `ChainAnchor` at its own sync height and validates the
+ * multisig summary against it, and a 0.17 summary binds the request's bound
+ * block, so the two agree only when the heights do. `syncWallet` is the lever.
  */
 export async function submitViaWallet(
   request: TransactionRequest,
@@ -479,15 +471,14 @@ export async function submitViaWallet(
 }
 
 /**
- * Drives the wallet to the current tip before we build a request.
+ * Syncs the wallet before a request is built.
  *
- * The wallet syncs inside `requestTransaction` and captures its `ChainAnchor`
- * at the resulting height. If that sync is the first of the session it spans a
- * block (the testnet interval is 3s), so the anchor lands one block after the
- * bound block we read from our own sync, and Bread rejects the multisig summary.
- * A `waitForTransaction` on the last submitted transaction forces the sync
- * first; the in-request sync is then incremental and does not cross a block.
- * With no remembered transaction, a store read is the best available nudge.
+ * The wallet captures its `ChainAnchor` at the height it syncs to inside
+ * `requestTransaction`. A first sync of the session can cross a block, which puts
+ * the anchor past the bound block the request declares, and Bread then rejects
+ * the multisig summary. Reading an already-confirmed transaction forces an
+ * incremental sync that does not cross a block; with no remembered transaction a
+ * consumable-note read is the nudge.
  */
 export async function syncWallet(): Promise<void> {
   const adapter = await getBreadWallet()

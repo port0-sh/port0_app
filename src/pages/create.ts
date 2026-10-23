@@ -1,27 +1,10 @@
 /**
- * Create pool page: three-step pool deployment.
+ * Pool creation, three steps: build the pool account in the client store, fund it
+ * and consume that note as the pool's first transaction (the network auth rejects
+ * an empty one), then emit the register note from the creator's wallet.
  *
- * Launchpad: mints a fixed-supply token to the creator's wallet (faucet with
- * maxSupply = initial supply, whole supply minted in one transaction). The
- * resulting faucet id can fill either token field with one click.
- *
- * Pool wizard, three irreversible steps, each marked as it completes:
- *   1. Build the pool account locally (createPoolAccount inserts it into the
- *      client store; nothing touches the chain).
- *   2. Fund it with a wallet note, then consume that note as the pool's first
- *      transaction. A 0.17 network auth rejects a transaction with no effect,
- *      so the funding note both commits the pool and pays its first fee. The
- *      app's own client submits the consume; the wallet sends the funding.
- *   3. Emit the register note from the creator's wallet. The registry verifies
- *      the pool code commitment and identity by foreign procedure invocation.
- *
- * Fee model: LP fee is one of the three Uniswap tiers (0.05% / 0.30% /
- * 1.00%); the registry lists the allowed tiers. The protocol's cut is a share
- * of the LP fee, read from the registry, and carved out of it. Network note
- * fees are denominated in the chain's fee asset.
- *
- * The SDK loads on first use; the page shell and the forms render
- * without it.
+ * The LP fee tier, the protocol's share of it, and the register price all come
+ * from the registry, which rejects a pool built with any other values.
  */
 
 import type { PoolNoteKind, PoolNoteFees } from '@port0.sh/sdk'
@@ -238,20 +221,39 @@ async function parseAccountRef(value: string, label: string): Promise<AccountId>
  * registration. Reading the policy here keeps the page and the registry in step.
  */
 let registryPolicy: RegistryFeePolicy | null = null
+/** The register price, read from the registry's own schedule beside the policy. */
+let registryRegisterFee: bigint | null = null
 
 async function loadRegistryPolicy(): Promise<RegistryFeePolicy> {
   if (registryPolicy) return registryPolicy
-  const [{ readRegistryFeePolicy }, client] = await Promise.all([xykModule(), getClient()])
+  const [{ readRegistryFeePolicy, readRegistryRegisterFee }, client] = await Promise.all([
+    xykModule(),
+    getClient(),
+  ])
   const registryId = await parseAccountRef(CONFIG.registryId, 'Registry account id')
   // The registry is a public account this client may never have tracked, so it
   // is imported from the chain on demand. A store-only read reports a deployed
   // registry as not found.
   await client.syncChain()
-  registryPolicy = await readRegistryFeePolicy(
-    (id) => getPublicAccount(id),
-    registryId,
-  )
+  const getAccount = (id: Parameters<typeof getPublicAccount>[0]) => getPublicAccount(id)
+  const [policy, registerFee] = await Promise.all([
+    readRegistryFeePolicy(getAccount, registryId),
+    readRegistryRegisterFee(getAccount, registryId),
+  ])
+  // The register price lives in the registry's own fee schedule, so it is read
+  // here and never configured: an admin change takes effect without a rebuild.
+  registryPolicy = policy
+  registryRegisterFee = registerFee
   return registryPolicy
+}
+
+/** The registry's live register price, in the fee asset's base units. */
+async function loadRegisterFee(): Promise<bigint> {
+  if (registryRegisterFee === null) await loadRegistryPolicy()
+  if (registryRegisterFee === null) {
+    throw new Error('The registry does not price the register note.')
+  }
+  return registryRegisterFee
 }
 
 function selectedFeeTierBps(): bigint {
@@ -323,16 +325,17 @@ function renderFeeBreakdown(): void {
   setText(feeBreakdown, `LP fee tier: ${formatBps(selectedFeeTierBps())}`)
 }
 
+/**
+ * The only gate is a connected wallet.
+ *
+ * The protocol fee destination is the registry's `protocol_fee_to`, read on chain
+ * when a pool collects, so no app-side configuration can enable or disable pool
+ * creation; the old recipient variable only duplicated that and went stale.
+ */
 function renderGating(): void {
-  const recipientSet = CONFIG.protocolFeeRecipient.length > 0
   const connected = walletStore.get().connected
-  if (!recipientSet) {
-    deployButton.disabled = true
-    deployButton.textContent = 'Set VITE_PROTOCOL_FEE_RECIPIENT to create'
-  } else {
-    deployButton.disabled = !connected
-    deployButton.textContent = connected ? 'Create pool' : 'Login to create'
-  }
+  deployButton.disabled = !connected
+  deployButton.textContent = connected ? 'Create pool' : 'Login to create'
 }
 
 deployButton.addEventListener('click', () => {
@@ -575,7 +578,7 @@ async function registerPoolOnRegistry(params: {
     {
       registryId: await parseAccountRef(CONFIG.registryId, 'Pool registry'),
       feeFaucetId: await client.feeFaucetId(),
-      registerFee: BigInt(CONFIG.registryRegisterFee),
+      registerFee: await loadRegisterFee(),
     },
     {
       sender: params.admin,

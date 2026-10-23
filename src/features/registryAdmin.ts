@@ -1,12 +1,7 @@
 /**
- * Registry admin: changes what registering a pool costs.
- *
- * The registry accepts a fee change only from the admin account it was created
- * with, and only for the register note's own price. This panel reads both the
- * admin and the live fee from chain, refuses to submit when the connected wallet
- * is not the admin, and otherwise emits a registry-config note and waits for the
- * price on chain to change. No sponsorship is attached: the registry prices that
- * note at zero and pays its own fee.
+ * Registry fee administration: reads the admin and the live register fee from
+ * chain, refuses to submit from any other wallet, and emits the registry-config
+ * note. The registry prices that note at zero and pays its own fee.
  */
 
 import { CONFIG } from '../lib/config'

@@ -153,14 +153,6 @@ export const CONFIG = {
     import.meta.env.VITE_NOTE_TRANSPORT_URL?.trim() || DEFAULTS.noteTransportUrl,
 
   /**
-   * Platform fee recipient. Pool creation is gated on this value; the pools
-   * pay the registry's `protocol_fee_to`, which the create flow reads from the
-   * registry. Account id in hex or bech32. Empty string when unset; pool
-   * creation is then disabled.
-   */
-  protocolFeeRecipient: import.meta.env.VITE_PROTOCOL_FEE_RECIPIENT?.trim() ?? '',
-
-  /**
    * Para wallet integration. Empty apiKey disables the Para option in the
    * wallet picker until a key is configured and the login flow is wired.
    */
@@ -177,7 +169,7 @@ export const CONFIG = {
    * Register note consumption fee, in the registry's fee asset (the chain fee
    * asset). Must match the registry's note fee schedule. Decimal string.
    */
-  registryRegisterFee: import.meta.env.VITE_REGISTRY_REGISTER_FEE?.trim() || '0',
+
 
   /**
    * Indexer base URL. When set, pool state is read from the indexer in one
