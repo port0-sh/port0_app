@@ -67,7 +67,7 @@ Environment variables are read at build time (`import.meta.env`):
 
 | Variable                       | Default                        | Meaning                                    |
 | ------------------------------ | ------------------------------ | ------------------------------------------ |
-| `VITE_NETWORK`                 | `testnet`                      | `testnet` or `mainnet`; selects the per-network defaults below |
+| `VITE_NETWORK`                 | `testnet`                      | `testnet`, `devnet`, `localnet`, or `mainnet`; an unknown value fails the build |
 | `VITE_MIDEN_RPC_URL`           | per network                    | Miden node RPC for on-chain reads          |
 | `VITE_CHAIN_FEE_FAUCET_ID`     | per network                    | Faucet of the chain's fee asset            |
 | `VITE_PROVER_URL`              | per network                    | `local`, `testnet`, `devnet`, or a remote prover URL |
@@ -101,19 +101,25 @@ An empty value disables browsing and the pool page.
 
 ## Networks
 
-| Value          | testnet                            | mainnet                                |
-| -------------- | ---------------------------------- | -------------------------------------- |
-| RPC            | `https://rpc.testnet.miden.io`     | `https://rpc.cedar.miden.io`           |
-| Fee faucet     | `0x4cbdcaffe75f0a317482224dae6436` | `0xe69e6ca6e39df1b10c1e5399399feb`     |
-| Prover         | `testnet`                          | `https://tx-prover.cedar.miden.io`     |
-| Note transport | `testnet`                          | `https://transport.cedar.miden.io`     |
-| Explorer       | `https://testnet.midenscan.com/account` | `https://explorer.cedar.miden.io/account` |
+| Value | testnet | mainnet | devnet | localnet |
+| --- | --- | --- | --- | --- |
+| RPC | `https://rpc.testnet.miden.io` | `https://rpc.cedar.miden.io` | `https://rpc.devnet.miden.io` | `http://localhost:57291` |
+| Fee faucet | `0x4cbdcaffe75f0a317482224dae6436` | `0xe69e6ca6e39df1b10c1e5399399feb` | (set explicitly) | (set explicitly) |
+| Prover | `testnet` | `https://tx-prover.cedar.miden.io` | `devnet` | `local` |
+| Note transport | `testnet` | `https://transport.cedar.miden.io` | `devnet` | `local` |
+| Explorer | `https://testnet.midenscan.com/account` | `https://explorer.cedar.miden.io/account` | `https://explorer.devnet.miden.io/account` | (none) |
+
+The chain is selected by name, not by a boolean. `VITE_NETWORK` takes
+`testnet`, `devnet`, `localnet`, or `mainnet`; an unrecognised value throws at
+build time rather than silently pointing a deployment at the wrong chain. Each
+entry also carries the chain's own network id, which decides an address's bech32
+prefix, and whether real funds are at stake, which gates the blocking risk
+notice.
 
 The node sends the CORS headers a browser needs, so development and builds talk
 to the RPC directly; no proxy is involved. The registry id, the pool code
 commitment, and the protocol fee recipient are deployed per network and are not
-defaults. The mainnet endpoints were read from the partner network on
-2026-10-22.
+defaults. The mainnet endpoints were read from the partner network on 2026-10-22.
 
 ## Architecture
 
@@ -127,18 +133,20 @@ src/lib/
   config.ts     resolved runtime configuration
   chart.ts      TradingView lightweight-charts candlesticks, imported on demand
   dom.ts        el()/qs()/clear() DOM helpers
-  fees.ts       LP fee tiers
+  fees.ts       LP fee tiers and the measured deploy fees
   format.ts     bigint-exact amount parsing/formatting, id shortening, bps
   history.ts    exact price ratios and chart series (tested)
   indexer.ts    pool source: indexer fetch plus fee-schedule root mapping
   multihop.ts   hop-by-hop swap execution through the wallet
+  network.ts    wallet network name and the chain's bech32 network id
   router.ts     multihop route selection over the indexed pools (tested)
   site.ts       footer year, the alpha notice, and the mainnet gate
   sound.ts      the completion bell, synthesized with Web Audio
   state.ts      ~30-line pub/sub store; the entire state layer
   token.ts      fixed-supply token validation
 src/features/
-  oneTimeMint.ts    fixed-supply faucet launcher
+  oneTimeMint.ts    fixed-supply token launcher
+  registryAdmin.ts  register fee panel, admin only
   sendPublicNote.ts public-note sender
   tokenPicker.ts    wallet-token picker with a manual fallback
 src/ui/
@@ -154,7 +162,7 @@ src/pages/
   create.ts     pool deployment and registration
   about.ts      static page; mounts the wallet control and footer
   media.ts      static page; mounts the wallet control and footer
-  utils.ts      one-time mint and send public note
+  utils.ts      one-time mint, registry admin, and send public note
 ```
 
 The home page's table never loads the SDK: it renders from the indexer, and
@@ -278,12 +286,13 @@ account id; pressing it opens a menu with one item, Disconnect.
 ## Utils page
 
 The chain utilities live on their own page at `/utils.html`, in the top
-navigation. Both act through a wallet, so their buttons stay disabled until one
-connects.
+navigation. All three act through a wallet, so their buttons stay disabled until
+one connects.
 
 | Utility | What it does |
 | --- | --- |
-| One-time mint | Creates a public faucet whose whole supply is minted to the wallet in one transaction, with `maxSupply` equal to that supply. Nothing can be minted afterwards and no auth component is installed |
+| One-time mint | Creates a network faucet whose whole supply is minted once to the wallet by a launch note, with `maxSupply` equal to that supply and an immutable owner. Nothing can be minted afterwards |
+| Registry admin | Changes the registry's register fee. It reads the admin and the live fee from chain, refuses a wallet that is not the admin, and emits a `registry-config` note |
 | Send public note | Sends the chain fee asset through the wallet's own `requestSend` with a public note type, the only path that can target an account that does not exist on-chain yet |
 
 Each builds its form in a modal.
@@ -337,29 +346,30 @@ The deploy step of pool creation is an exception: the pool is a network
 account without a key. The wallet sends a small chain fee asset note to the
 pool address, and the app's own client consumes that note as the pool's first
 transaction, which commits the account and pays its first fee. There is no
-scriptless deploy, because the 0.17 network auth rejects a transaction with no
+scriptless deploy, because the network auth rejects a transaction with no
 effect.
 
 ## Token minting
 
-The Utils page mints a fixed-supply token: the faucet is created with
-`maxSupply` equal to the initial supply and the whole supply is minted to the
-caller's wallet. Nothing remains to mint afterwards. The faucet id can fill
-either token field of the create page's pool form.
+The Utils page launches a fixed-supply token. The faucet is a network account, so
+creating it needs no invitation code on a gated network. It is created with
+`maxSupply` equal to the initial supply and an immutable owner; one launch note
+mints that whole amount to the caller's wallet. Nothing remains to mint
+afterwards, and the launch cannot be repeated. The faucet id can fill either
+token field of the create page's pool form.
 
 Funding: a fresh faucet has an empty vault and cannot pay the fee of its own
-first transaction, so the connected wallet sends 0.000266 USDCX (the chain
-fee asset) to the new faucet: exactly the two transaction fees it will pay
-(consume + mint, 2 × 133 base units at the measured testnet fee). The faucet's
-first transaction consumes that note, which creates
-the faucet on-chain and pays its fee out of the received funds (the
-protocol's account-funding model). The supply mint follows as the second
-transaction.
+first transaction, so the connected wallet sends 112 base units to the new
+faucet, the measured cost of a faucet deploy consume. That transaction consumes
+the funding note, which creates the faucet on chain. A faucet has no sweep, so the
+funding is the exact measured cost. The launch is a second transaction, paid by
+the owner's wallet through a fee sponsorship of 119 base units.
 
-Validation (see `src/lib/token.ts`): symbol 3-6 uppercase ASCII letters (the
-0.17 protocol rejects digits), decimals integer 0-8, initial supply entered
-in tokens and bounded by the port0 contract's `MAX_AMOUNT` (2^57 base units;
-amounts are u64 with u128 intermediates and 10_000 bps fee headroom).
+Validation (see `src/lib/token.ts`): symbol 3-12 uppercase ASCII letters (the
+protocol rejects digits), an optional name up to 32 characters, decimals integer
+0-8, initial supply entered in tokens and bounded by the port0 contract's
+`MAX_AMOUNT` (2^57 base units; amounts are u64 with u128 intermediates and
+10,000 bps fee headroom).
 
 ## Fee model
 
@@ -392,12 +402,12 @@ runs.
 
 ## Known limitations
 
-- Closed alpha. The app builds for testnet by default and for the Miden partner
-  mainnet with `VITE_NETWORK=mainnet`.
+- Closed alpha. The app builds for testnet by default. `VITE_NETWORK` selects
+  testnet, devnet, localnet, or the Miden partner mainnet.
 - The indexer is required. An empty `VITE_INDEXER_URL` disables browsing and
   the pool page.
-- Network note fees use the chain's own fee asset and faucet (0.17 protocol
-  rule); the creator's wallet must hold the chain fee asset.
+- Network note fees use the chain's own fee asset and faucet, a protocol rule;
+  the creator's wallet must hold the chain fee asset.
 
 ## Source
 

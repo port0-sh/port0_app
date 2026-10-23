@@ -85,8 +85,9 @@
     <section class="panel">
       <h2>One-time mint</h2>
       <p>
-        Creates a faucet whose whole supply is minted to the wallet in one transaction.
-        Nothing can be minted afterwards, and no auth component is installed.
+        Creates a network faucet and launches its whole supply to the wallet in one
+        launch. The faucet records an owner and a launch flag, so nothing can be minted
+        afterwards and the launch cannot be repeated.
       </p>
       <button type="button" class="btn btn-primary" id="util-mint" disabled>Mint a token</button>
     </section>
