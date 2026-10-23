@@ -2,9 +2,10 @@
 
 Static web application for the port0.sh constant-product AMM on Miden. Users
 browse pools, swap, deposit and withdraw liquidity, and create pools. There is
-no application framework and no client-side router: each page is a real HTML
-document with its own metadata, its own module entry, and a minimal amount of
-TypeScript.
+no application framework and no client-side page router: each page is a real
+HTML document with its own metadata, its own module entry, and a minimal amount
+of TypeScript. A separate swap router ranks multihop routes over the indexed
+pools.
 
 ## Pages
 
@@ -41,7 +42,7 @@ npm run build      # tsc -b && vite build → dist/
 npm run preview    # serve dist/ locally
 ```
 
-The build output is plain static files (`dist/`): four HTML documents, one
+The build output is plain static files (`dist/`): six HTML documents, one
 CSS file, one small JS bundle per page, and a shared lazy chunk containing the
 Miden SDK. Deploy `dist/` to any static file host.
 
@@ -78,6 +79,7 @@ Environment variables are read at build time (`import.meta.env`):
 | `VITE_INDEXER_URL`             | (empty)                        | Indexer base URL; empty disables browsing and the pool page |
 | `VITE_PARA_API_KEY`            | (empty)                        | Para API key; empty keeps the Para option disabled |
 | `VITE_PARA_ENVIRONMENT`        | `BETA`                         | Para environment; `PRODUCTION` for production builds |
+| `VITE_BRAND_*`                 | see [Branding](#branding)      | Wordmark, mark text, slogan, and unfurl metadata |
 
 `VITE_PROTOCOL_FEE_RECIPIENT` accepts a hex account id or a bech32 address.
 It gates pool creation on the create page. The pool's actual protocol fee
@@ -129,7 +131,10 @@ src/lib/
   format.ts     bigint-exact amount parsing/formatting, id shortening, bps
   history.ts    exact price ratios and chart series (tested)
   indexer.ts    pool source: indexer fetch plus fee-schedule root mapping
+  multihop.ts   hop-by-hop swap execution through the wallet
+  router.ts     multihop route selection over the indexed pools (tested)
   site.ts       footer year, the alpha notice, and the mainnet gate
+  sound.ts      the completion bell, synthesized with Web Audio
   state.ts      ~30-line pub/sub store; the entire state layer
   token.ts      fixed-supply token validation
 src/features/
@@ -137,13 +142,14 @@ src/features/
   sendPublicNote.ts public-note sender
   tokenPicker.ts    wallet-token picker with a manual fallback
 src/ui/
+  spinner.ts    the loading spinner
   toast.ts      notification stack
   modal.ts      native <dialog> wrapper
 src/wallet/
   wallet.ts     unified wallet facade (Bread wired; Para gated)
   ui.ts         header connect button, wallet picker, address chip
 src/pages/
-  home.ts       pool table from the indexer, 15 s refresh while visible
+  home.ts       pool table and the swap card, 15 s refresh while visible
   pool.ts       state summary, quotes, swap/add/remove, history chart
   create.ts     pool deployment and registration
   about.ts      static page; mounts the wallet control and footer
@@ -151,8 +157,10 @@ src/pages/
   utils.ts      one-time mint and send public note
 ```
 
-The home page never loads the SDK: the table renders from the indexer, and
-`toPoolView` is called without note-fee mapping. The Login button is plain HTML plus
+The home page's table never loads the SDK: it renders from the indexer, and
+`toPoolView` is called without note-fee mapping. The swap card and the
+`multihop.ts` runner do load the SDK, on the first swap. The Login button is
+plain HTML plus
 a light module; the wallet adapter and the WASM stack behind it load on first
 connect. `pool.html` and `create.html` load the SDK lazily on first use, so
 every page shell renders without WASM on the critical path.
@@ -180,16 +188,43 @@ schedule roots to note kinds through the SDK's compiled note scripts.
 
 ## Pool list
 
-The home page lists the pools the indexer serves, 50 per page, polled every
-15 s while the tab is visible. Each row carries the pair and its short pool id,
-the price of one token0 in token1, both reserves, 24-hour volume in both
-tokens, the LP fee, and the fee yield with the window it is annualised over.
-Rows are ordered by pair name so a row keeps its place between refreshes; a
-filter accepts a faucet id, and **Load more** walks the indexer's keyset cursor.
-The page needs no chain read and no WASM: prices come from the indexer's
+The home page loads every pool the indexer serves, in indexer pages of 200, and
+polls every 15 s while the tab is visible. Each row carries the pair and its
+short pool id, the price of one token0 in token1, both reserves, 24-hour volume
+in both tokens, the LP fee, and the fee yield, normalised to a 24-hour basis.
+
+Filtering, sorting, and paging run in the browser over the loaded set, so neither
+a filter nor a sort makes another request. The filter matches a symbol, a pair,
+or a faucet id. Sorting is by volume descending by default, and any column can be
+sorted in either direction. The pager offers 10, 25, or 50 rows, defaulting to
+10, and remembers the choice.
+
+The table needs no chain read and no WASM: prices come from the indexer's
 reserves through the same exact bigint arithmetic the pool page uses, and
 `toPoolView` is called without note-fee mapping, which is the only reason that
 module would import the SDK.
+
+## Swap card
+
+The home page carries a swap card that quotes over the indexed pools without
+loading the SDK, then executes through the wallet one hop at a time.
+
+`src/lib/router.ts` enumerates routes up to three hops over distinct tokens and
+ranks them by output, with the direct pool preferred at equal output. Two pools
+cannot serve the same pair, so each hop has one pool. The quote uses the
+indexer's last snapshot, so it is a quote and not a guarantee.
+
+`src/lib/multihop.ts` runs the route. Each hop is its own wallet transaction:
+the pool consumes the swap note and emits a P2ID note of the output token to the
+sender, so the intermediate asset has to reach the wallet's vault before the next
+hop can spend it. The next hop's input is the amount the wallet actually
+received, so a reserve shift between hops changes only the final output. A
+failed hop reports its index, and a retry resumes at that hop. Each hop carries
+its own slippage bound.
+
+A completed swap rings a two-strike bell, synthesized with Web Audio. A browser
+only allows audio after a user gesture, so the audio context opens on the swap
+click.
 
 ## Pool page
 
@@ -231,9 +266,9 @@ by the contract's own formula against the chain state. Until the first chain
 read returns, the headline is filled from the indexer's reserves with the same
 ratio arithmetic, and the indexer never overrides a chain-derived price. The
 summary also carries the pool's yield and the fees its liquidity providers
-earned, both from the indexer's activity ring: the yield is the fees against the
-reserves that earned them, annualised over 24 hours or the pool's age while it
-is younger, and that window is shown next to the rate.
+earned, both from the indexer's activity ring. The yield is the fees against the
+reserves that earned them, normalised to a 24-hour basis and labelled `24h`, so
+every pool reads on the same window.
 
 ## Wallet menu
 
@@ -260,8 +295,12 @@ The name and slogan are configuration; the two drawings are files:
 | Item | Effect |
 | --- | --- |
 | `VITE_BRAND_NAME` | Wordmark, page titles, `og:site_name`, footer |
+| `VITE_BRAND_MARK_TEXT` | Text form of the mark, used in page titles |
 | `VITE_BRAND_LOGO_TEXT` | Text mark beside the header logo; falls back to the name |
 | `VITE_BRAND_SLOGAN` | One line under the home page name; empty hides it |
+| `VITE_BRAND_TAGLINE` | Unfurl title and image alt text |
+| `VITE_BRAND_DESCRIPTION` | Unfurl description and manifest description |
+| `VITE_BRAND_X_HANDLE` | X account, for `twitter:site` |
 | `src/assets/branding/hero.html` | The home page hero |
 | `src/assets/branding/logo.html` | The mark in the header of the other pages |
 
@@ -333,7 +372,7 @@ create page; the destination the pools pay is `protocol_fee_to` in the registry.
 
 Network note fees are denominated in the chain's fee asset, paid to the
 chain's own fee faucet (`VITE_CHAIN_FEE_FAUCET_ID`). This is not a choice:
-since 0.17 the node never runs network transactions for an account whose fee
+the node never runs network transactions for an account whose fee
 asset differs from the chain's protocol configuration, so the app reads the
 faucet from the client instead of asking the user. The creator's wallet must
 hold the chain fee asset to pay network note fees when acting on a pool
