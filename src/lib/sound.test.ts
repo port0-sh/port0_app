@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { playArrivalBell, setSoundEnabled, soundEnabled } from './sound'
+import { playArrivalBell, primeSound, setSoundEnabled, soundEnabled } from './sound'
 
 const store = new Map<string, string>()
 const storage = {
@@ -40,7 +40,10 @@ describe('sound', () => {
     expect(() => setSoundEnabled(false)).not.toThrow()
   })
 
-  it('plays nothing when the browser has no Web Audio', () => {
+  it('plays nothing where there is no audio element', () => {
+    // Node has no `Audio`, so the bell is a no-op rather than a throw.
+    vi.stubGlobal('Audio', undefined)
     expect(() => playArrivalBell()).not.toThrow()
+    expect(() => primeSound()).not.toThrow()
   })
 })

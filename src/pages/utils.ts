@@ -5,6 +5,7 @@
  */
 
 import { openOneTimeMint } from '../features/oneTimeMint'
+import { openRegistryAdmin } from '../features/registryAdmin'
 import { openSendPublicNote } from '../features/sendPublicNote'
 import { mountSite } from '../lib/site'
 import { mountWallet } from '../wallet/ui'
@@ -15,14 +16,16 @@ mountSite()
 
 const mint = document.getElementById('util-mint')
 const send = document.getElementById('util-send')
+const fees = document.getElementById('util-fees')
 const hint = document.getElementById('util-hint')
 
 mint?.addEventListener('click', () => openOneTimeMint())
 send?.addEventListener('click', () => openSendPublicNote())
+fees?.addEventListener('click', () => openRegistryAdmin())
 
 function render(): void {
   const { connected } = walletStore.get()
-  for (const button of [mint, send]) {
+  for (const button of [mint, send, fees]) {
     if (button instanceof HTMLButtonElement) button.disabled = !connected
   }
   if (hint) hint.hidden = connected

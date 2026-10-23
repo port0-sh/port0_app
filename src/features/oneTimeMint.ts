@@ -33,6 +33,7 @@ import { toast } from '../ui/toast'
 import { getClient, sdkModule, xykModule } from '../lib/client'
 import {
   sendViaWallet,
+  submitViaWallet,
   waitForTransaction,
   walletAccountId,
 } from '../wallet/wallet'
@@ -153,13 +154,17 @@ export function openOneTimeMint(): void {
       ])
 
       setText(status, 'Step 1/6: creating the faucet account')
-      const faucet = await client.accounts.create({
-        type: 'FungibleFaucet',
-        storage: 'public',
+      // A network account, so the faucet is exempt from any keyed-account
+      // allowlist: launching a token needs no invitation code.
+      const { createNetworkFaucet, LAUNCH_FEE } = await xykModule()
+      const faucet = await createNetworkFaucet(client, {
         name,
         symbol: ticker,
         decimals: digits,
         maxSupply: total,
+        owner: wallet,
+        // Hex or bech32; the SDK resolves either.
+        feeFaucetId: CONFIG.chainFeeFaucetId,
       })
       const faucetId = faucet.id().toString()
 
@@ -183,15 +188,25 @@ export function openOneTimeMint(): void {
         waitForConfirmation: true,
       })
 
-      setText(status, 'Step 6/6: minting the whole supply')
-      await client.syncChain()
-      await client.transactions.mint({
-        account: faucetId,
-        to: wallet.toString(),
-        amount: total,
-        type: 'public',
-        waitForConfirmation: true,
+      setText(status, 'Step 6/6: launching the token')
+      // The whole supply leaves in one note the owner's wallet can accept. The
+      // faucet enforces the owner and the one-launch rule on chain.
+      const { buildLaunchNote, buildFeeSponsorshipNote, outputNotesRequest } = await xykModule()
+      const launch = buildLaunchNote({
+        sender: wallet,
+        faucetId: faucet.id(),
+        recipient: wallet,
       })
+      const sponsor = buildFeeSponsorshipNote({
+        sender: wallet,
+        target: faucet.id(),
+        featureNote: launch,
+        feeFaucetId: CONFIG.chainFeeFaucetId,
+        feeAmount: LAUNCH_FEE,
+      })
+      const request = await outputNotesRequest(client, [launch, sponsor], faucet.id())
+      const launchTx = await submitViaWallet(request)
+      await waitForTransaction(launchTx)
 
       faucetLine.setAttribute('title', faucetId)
       setText(faucetLine, `${name} · ${shortHex(faucetId)}`)
