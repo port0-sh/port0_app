@@ -102,8 +102,15 @@ async function normalizeFaucet(raw: string): Promise<string | null> {
   }
 }
 
-/** The wallet's balance of `faucetId`, in base units. */
-async function walletBalance(faucetId: string): Promise<bigint> {
+/**
+ * The wallet's balance of `faucetId`, in base units, or null when the read
+ * itself failed.
+ *
+ * Null and zero must stay distinct: a failed read treated as zero makes the
+ * waiter below conclude that nothing arrived, and it then polls until the
+ * timeout although the payout is sitting in the wallet.
+ */
+async function walletBalance(faucetId: string): Promise<bigint | null> {
   const wanted = normalizeHex(faucetId)
   try {
     for (const asset of await requestAssets()) {
@@ -116,7 +123,8 @@ async function walletBalance(faucetId: string): Promise<bigint> {
       }
     }
   } catch {
-    // No permission, or the wallet refused the read: treated as no balance.
+    // No permission, or the wallet refused the read: the balance is unknown.
+    return null
   }
   return 0n
 }
@@ -124,6 +132,28 @@ async function walletBalance(faucetId: string): Promise<bigint> {
 /** The amount a hop guarantees at most `slippageBps` below its quote. */
 function minOut(amountOut: bigint, slippageBps: bigint): bigint {
   return (amountOut * (10_000n - slippageBps)) / 10_000n
+}
+
+/** Accepts a payout note through the wallet and reports the consume transaction. */
+async function acceptNote(
+  note: { noteId: string; noteType?: unknown },
+  amount: bigint,
+  faucetId: string,
+  wanted: string,
+  onWait: (phase: RoutePhase, message: string) => void,
+): Promise<Acquired> {
+  if (amount > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error('The intermediate amount is too large for a wallet consume request.')
+  }
+  const { NoteType } = await import('@miden-sdk/miden-sdk')
+  onWait('confirm-consume', `Confirm accepting ${shortHex(wanted)} in your wallet…`)
+  const consumeTxId = await consumeNote(
+    faucetId,
+    note.noteId,
+    note.noteType === NoteType.Public ? 'public' : 'private',
+    Number(amount),
+  )
+  return { amount, consumeTxId }
 }
 
 interface Acquired {
@@ -153,10 +183,19 @@ async function acquireIntermediate(
     await syncWallet()
 
     const held = await walletBalance(wanted)
-    const received = held > balanceBefore ? held - balanceBefore : 0n
+    const received = held !== null && held > balanceBefore ? held - balanceBefore : 0n
     if (received >= minimum) return { amount: received }
 
-    for (const note of await consumableNotes()) {
+    // The gate above uses `minimum`, which comes from the route quote taken
+    // before the hop ran. Reserves move, so the pool can legitimately pay less
+    // than that quote while still respecting the request's own min-out. A note
+    // of the right faucet therefore counts as the hop's payout even below
+    // `minimum`; the hop's min-out already bounded the rate, and the next hop's
+    // min-out bounds the continuation. Waiting for a stale figure instead is an
+    // infinite wait on a payout that has arrived.
+    const notes = await consumableNotes()
+    let fallback: { note: (typeof notes)[number]; amount: bigint } | null = null
+    for (const note of notes) {
       let amount: bigint | null = null
       for (const asset of note.assets) {
         const key = await normalizeFaucet(asset.faucetId)
@@ -168,19 +207,24 @@ async function acquireIntermediate(
         }
         break
       }
-      if (amount === null || amount < minimum) continue
+      if (amount === null || amount === 0n) continue
+      if (amount < minimum) {
+        if (fallback === null || amount > fallback.amount) fallback = { note, amount }
+        continue
+      }
       if (amount > BigInt(Number.MAX_SAFE_INTEGER)) {
         throw new Error('The intermediate amount is too large for a wallet consume request.')
       }
-      const { NoteType } = await import('@miden-sdk/miden-sdk')
-      onWait('confirm-consume', `Confirm accepting ${shortHex(wanted)} in your wallet…`)
-      const consumeTxId = await consumeNote(
-        faucetId,
-        note.noteId,
-        note.noteType === NoteType.Public ? 'public' : 'private',
-        Number(amount),
-      )
-      return { amount, consumeTxId }
+      return await acceptNote(note, amount, faucetId, wanted, onWait)
+    }
+
+    // A payout of this faucet is in the wallet but below the stale quote: take
+    // the largest one. The hop executed under its own min-out, so a smaller
+    // figure is the pool's actual payment, not a shortfall; the next hop's
+    // min-out rejects a continuation that the amount cannot support, which is a
+    // clear error rather than an endless wait.
+    if (fallback !== null) {
+      return await acceptNote(fallback.note, fallback.amount, faucetId, wanted, onWait)
     }
 
     if (Date.now() > deadline) {
@@ -293,7 +337,9 @@ export async function executeRoute(options: {
         // height.
         await getFreshAccount(poolAccountId)
         await syncWallet()
-        if (!last) balanceBefore = await walletBalance(hop.tokenOut)
+        // An unknown balance must not be recorded as a snapshot: a zero would
+        // make the waiter below read the whole payout as a delta of nothing.
+        if (!last) balanceBefore = (await walletBalance(hop.tokenOut)) ?? 0n
         onHop?.(index, amountIn, balanceBefore, 'submit')
 
         executed[index] = {

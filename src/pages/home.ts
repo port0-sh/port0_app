@@ -953,6 +953,20 @@ function renderSwapReceipt(route: Route, result: RouteResult): void {
   )
 }
 
+/**
+ * Re-quotes a route for the same input so a retry does not inherit stale
+ * amounts. Returns the same route when the pools still price it identically, and
+ * the stale one when no route exists any more: the resume point is worth more
+ * than a fresh quote that cannot be computed.
+ */
+function retireRoute(route: Route): Route {
+  const tokens = routeTokens(route)
+  const from = tokens[0]
+  const to = tokens[tokens.length - 1]
+  const fresh = findRoutes(routerPools(allPools), from, to, route.amountIn)[0]
+  return fresh ?? route
+}
+
 function renderRouteQuote(): void {
   clear(routeQuote)
   routeBest = null
@@ -1074,7 +1088,10 @@ function renderRouteQuote(): void {
 
 async function doRouteSwap(): Promise<void> {
   const pending = pendingRoute
-  const route = pending?.route ?? routeBest
+  // A retry keeps the resume point, not the old quote: the first attempt may
+  // have failed because reserves moved, and reusing its amounts would fail the
+  // same way every time. Re-quote the same input along the same path.
+  const route = pending ? retireRoute(pending.route) : routeBest
   if (!route) {
     toast('No route to swap.', 'error')
     return
