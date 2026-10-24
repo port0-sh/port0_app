@@ -238,24 +238,13 @@ a:active {
   color: var(--white);
 }
 
-/*
- * The mark's SVG keeps a wide margin around the glyph: right for a tab icon, too
- * small for a header. The box crops that margin rather than the file being
- * re-exported, and the glyph is centred, so a centred crop shows it whole.
- */
-.brand-mark-box {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 4ch;
-  height: 1.75rem;
-  overflow: hidden;
-  flex: none;
-}
-
-.brand-mark-box img {
-  width: 4.4rem;
-  height: 4.4rem;
+/* The header mark is mark.svg, sized by height. Its viewBox is the ink's
+   bounds, so the height is the visible height and the width follows the
+   280.41:146.51 ratio; nothing is cropped and no wrapper is involved. */
+.brand-mark {
+  display: block;
+  height: 1.25rem;
+  width: auto;
   flex: none;
 }
 
@@ -1494,6 +1483,8 @@ dialog.alpha-gate li {
      margins instead. */
   overflow-x: auto;
   padding-inline: 1ch;
+  /* The font size below is a fraction of this box, not of the viewport. */
+  container-type: inline-size;
 }
 
 /*
@@ -1511,7 +1502,11 @@ dialog.alpha-gate li {
   margin-inline: auto;
   text-align: left;
   font-family: "aahub_light", "MS PGothic", "MS Gothic", monospace;
-  font-size: 14px;
+  /* The bundled drawing measures 690.375px at 14px, which is 49.3125em. Fitting
+     that em to the banner's content box keeps every row inside the viewport on
+     a narrow screen; the 14px cap restores the desktop size from 729px. A wider
+     replacement drawing scrolls in #site-banner. */
+  font-size: min(14px, calc(100cqw / 49.3125));
   line-height: 1;
   color: var(--white);
   white-space: pre;
