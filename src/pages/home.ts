@@ -436,7 +436,7 @@ function poolRow(pool: IndexerPool): HTMLTableRowElement {
     ),
     el(
       'td',
-      { class: 'num', 'data-label': 'Price' },
+      { class: 'num' },
       el('span', { class: 'figure' }, price ?? '—'),
       price === null ? null : el('span', { class: 'sub' }, `${view.token1Symbol} per ${view.token0Symbol}`),
     ),
@@ -444,7 +444,7 @@ function poolRow(pool: IndexerPool): HTMLTableRowElement {
     // whole table; the exact amount is the tooltip.
     el(
       'td',
-      { class: 'num', 'data-label': 'Reserves' },
+      { class: 'num' },
       line(
         compactAmount(reserve0, view.token0Decimals),
         view.token0Symbol,
@@ -458,13 +458,13 @@ function poolRow(pool: IndexerPool): HTMLTableRowElement {
     ),
     el(
       'td',
-      { class: 'num hide-sm', 'data-label': 'Volume 24h' },
+      { class: 'num hide-sm' },
       line(compactAmount(BigInt(pool.volume_24h_0), view.token0Decimals), view.token0Symbol),
       line(compactAmount(BigInt(pool.volume_24h_1), view.token1Decimals), view.token1Symbol),
     ),
     el(
       'td',
-      { class: 'num', 'data-label': 'Fee' },
+      { class: 'num' },
       el('span', { class: 'figure' }, formatBps(BigInt(pool.lp_fee_bps))),
     ),
     feeAprCell(pool),
@@ -498,13 +498,13 @@ function feeAprCell(pool: IndexerPool): HTMLTableCellElement {
   if (!(pool.fee_apr_window_secs > 0)) {
     return el(
       'td',
-      { class: 'num', 'data-label': 'Fee APR' },
+      { class: 'num' },
       el('span', { class: 'figure muted' }, '—'),
     )
   }
   return el(
     'td',
-    { class: 'num', 'data-label': 'Fee APR' },
+    { class: 'num' },
     el(
       'span',
       { class: 'figure accent' },

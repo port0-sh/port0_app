@@ -914,6 +914,43 @@ dialog.modal::backdrop {
   margin-top: 1rem;
 }
 
+/*
+ * Price history: six numeric columns need a floor each. Without one, a phone
+ * divides the panel between them and every figure wraps mid-number. The panel
+ * already scrolls sideways.
+ */
+#history-table th,
+#history-table td {
+  white-space: nowrap;
+}
+
+#history-table th:nth-child(1),
+#history-table td:nth-child(1) {
+  min-width: 6ch;
+}
+
+#history-table th:nth-child(2),
+#history-table td:nth-child(2) {
+  min-width: 7ch;
+}
+
+#history-table th:nth-child(3),
+#history-table td:nth-child(3) {
+  min-width: 10ch;
+}
+
+#history-table th:nth-child(4),
+#history-table td:nth-child(4),
+#history-table th:nth-child(5),
+#history-table td:nth-child(5) {
+  min-width: 12ch;
+}
+
+#history-table th:nth-child(6),
+#history-table td:nth-child(6) {
+  min-width: 10ch;
+}
+
 #history-note {
   margin: 0.75rem 0 0;
 }
@@ -1153,9 +1190,8 @@ dialog.alpha-gate li {
 
   /*
    * The pool list becomes cards below the width where the columns stop
-   * fitting: a header with the pair and the price, then a two-column grid of
-   * reserves, volume, and fees under one card border. The card carries the
-   * frame; a rule between every section would read as a maze of lines.
+   * fitting. The card frame is the only line: no rule between sections, no
+   * border on the link. Sections separate by space and the small-caps labels.
    */
   #pool-table {
     max-height: none;
@@ -1166,12 +1202,8 @@ dialog.alpha-gate li {
     display: none;
   }
 
-  /*
-   * The cells are grid items here, but the table still carries the collapsed
-   * border model, and an engine may paint its computed cell edges as short
-   * rules inside the card. Separate borders leave the card frame as the only
-   * line, and the cells draw none of their own.
-   */
+  /* The cells are grid items, so the collapsed border model would paint their
+     computed edges as short rules inside the card. */
   .pool-table {
     border-collapse: separate;
   }
@@ -1198,15 +1230,9 @@ dialog.alpha-gate li {
     margin-bottom: 0.85rem;
   }
 
-  /*
-   * No cell borders: the global `td` rule draws a bottom border per cell, which
-   * on a grid becomes one short inset line per column. A cell's rule belongs to
-   * a table; here the card's own border is the only line.
-   */
   .pool-table td {
     min-width: 0;
     padding: 0 1.5ch;
-    border: 0;
     text-align: left;
   }
 
@@ -1214,9 +1240,27 @@ dialog.alpha-gate li {
     text-align: left;
   }
 
-  /* A small-caps label over each stat, so a cell reads as a block. */
-  .pool-table td::before {
-    content: attr(data-label);
+  /* Column labels: the table head is hidden, so each stat names itself. */
+  .pool-table td:nth-child(3)::before {
+    content: 'Reserves';
+  }
+
+  .pool-table td:nth-child(4)::before {
+    content: 'Volume 24h';
+  }
+
+  .pool-table td:nth-child(5)::before {
+    content: 'Fee';
+  }
+
+  .pool-table td:nth-child(6)::before {
+    content: 'Fee APR';
+  }
+
+  .pool-table td:nth-child(3)::before,
+  .pool-table td:nth-child(4)::before,
+  .pool-table td:nth-child(5)::before,
+  .pool-table td:nth-child(6)::before {
     display: block;
     margin-bottom: 0.3rem;
     color: var(--light-grey);
@@ -1226,84 +1270,71 @@ dialog.alpha-gate li {
   }
 
   /* Header: the pair on the left, the price as the card's one large figure. */
-  .pool-table td:first-child {
+  .pool-table td:nth-child(1) {
     grid-column: 1;
     grid-row: 1;
   }
 
-  .pool-table td:first-child::before {
-    content: none;
-  }
-
-  .pool-table td[data-label='Price'] {
+  .pool-table td:nth-child(2) {
     grid-column: 2;
     grid-row: 1;
     text-align: right;
   }
 
-  .pool-table td[data-label='Price']::before {
-    content: none;
-  }
-
-  .pool-table td[data-label='Price'] .figure {
+  .pool-table td:nth-child(2) .figure {
     font-size: 1.15em;
   }
 
-  .pool-table td[data-label='Reserves'],
-  .pool-table td[data-label='Fee'] {
+  .pool-table td:nth-child(3) {
     grid-column: 1;
-  }
-
-  .pool-table td[data-label='Reserves'],
-  .pool-table td[data-label='Volume 24h'] {
     grid-row: 2;
   }
 
-  .pool-table td[data-label='Fee'],
-  .pool-table td[data-label='Fee APR'] {
+  .pool-table td:nth-child(4) {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .pool-table td:nth-child(5) {
+    grid-column: 1;
     grid-row: 3;
   }
 
-  .pool-table td[data-label='Volume 24h'],
-  .pool-table td[data-label='Fee APR'] {
+  .pool-table td:nth-child(6) {
     grid-column: 2;
+    grid-row: 3;
   }
 
-  /* The window belongs to the APR, not to a line of its own. */
-  .pool-table td[data-label='Fee APR'] .figure {
+  .pool-table td:nth-child(7) {
+    grid-column: 1 / -1;
+    grid-row: 4;
+  }
+
+  /* The APR's window belongs beside the figure, not on a line of its own. */
+  .pool-table td:nth-child(6) .figure,
+  .pool-table td:nth-child(6) .sub {
     display: inline;
   }
 
-  .pool-table td[data-label='Fee APR'] .sub {
-    display: inline;
+  .pool-table td:nth-child(6) .sub {
     margin-left: 0.6ch;
   }
 
-  /* A figure that no longer fits its column wraps instead of crossing it. */
+  /* Volume has room on a card, so the narrow-screen hiding does not apply. */
+  .pool-table td.hide-sm {
+    display: block;
+  }
+
+  /* A long symbol wraps inside its column rather than crossing the frame. */
   .pool-table .line {
     white-space: normal;
     overflow-wrap: anywhere;
   }
 
-  /* Volume has room on a card, so it comes back. Scoped to the cell: the
-     header cell of the same class sits in the hidden head. */
-  .pool-table td.hide-sm {
-    display: block;
-  }
-
-  /*
-   * A card is not a click target: selecting an amount or copying the pool id
-   * must not open the pool. The row's link is the control at the card's foot,
-   * and it is a link rather than a button so the card keeps one border.
-   */
+  /* A card is not a click target: selecting an amount or copying the pool id
+     must not open the pool. The link at the foot is the row's one control. */
   .pool-table .row-link {
     display: none;
-  }
-
-  .pool-table .open-col {
-    grid-column: 1 / -1;
-    grid-row: 4;
-    width: auto;
   }
 
   .pool-table .open-col a {
@@ -1323,10 +1354,7 @@ dialog.alpha-gate li {
   }
 }
 
-/*
- * The narrowest phones leave a stat column under twelve characters wide, where
- * a six-letter symbol breaks mid-word; one step down keeps it whole.
- */
+/* The narrowest phones leave a stat column under twelve characters wide. */
 @media (max-width: 360px) {
   .pool-table td {
     padding: 0 1ch;

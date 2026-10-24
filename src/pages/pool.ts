@@ -15,6 +15,7 @@ import {
   getClient,
   getFreshAccount,
   getXyk,
+  resetClient,
   sdkModule,
   xykModule,
   type XykModule,
@@ -226,8 +227,11 @@ async function boot(): Promise<void> {
   walletStore.subscribe(() => {
     renderWalletGating()
     void refreshBalances()
+    // Connecting is what makes chain state useful, and it is the moment the
+    // client may first be built.
+    void loadState()
   })
-  // The chart needs only indexer data, so it draws while the chain read runs.
+  // The chart needs only indexer data, so it draws without the client.
   await loadHistory()
   await loadState()
   await refreshBalances()
@@ -255,14 +259,61 @@ function chainRead<T>(work: () => Promise<T>): Promise<T> {
   return run
 }
 
+/**
+ * Why the chain read is unavailable, when it is.
+ *
+ * `null` means the last read succeeded or has not run. The two cases read
+ * differently to a user: the client is a 21 MB WebAssembly module that a flaky
+ * connection can fail to fetch, which is a reload, while a failed sync is
+ * usually transient.
+ */
+let chainUnavailable: 'client' | 'state' | null = null
+
+/** Builds the chain client, retrying a failed load before giving up. */
+async function loadClient(): Promise<Awaited<ReturnType<typeof getClient>> | null> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await getClient()
+    } catch (error) {
+      console.warn(`trading client load failed (attempt ${attempt + 1})`, error)
+      // The memoised rejection would make every later call fail the same way.
+      resetClient()
+      if (attempt < 2) await sleep(1_000 * 2 ** attempt)
+    }
+  }
+  return null
+}
+
+/** States the chain-read failure, but only to someone who can act on it. */
+function reportChainUnavailable(): void {
+  // A reader who has not connected a wallet does nothing on chain: the indexer
+  // supplies the price, the reserves, and the history. Downloading the client
+  // and reporting that it failed is noise, so the page stays quiet.
+  if (!walletStore.get().connected) return
+  if (currentState) return
+  showPoolError(
+    chainUnavailable === 'client'
+      ? 'Could not load the trading client. Check your connection and reload.'
+      : 'Pool state is unavailable right now. Reload to try again.',
+  )
+}
+
 async function loadState(): Promise<void> {
   if (!poolIdHex) return
+  // Nothing on the page needs the client until a wallet can act on chain.
+  if (!walletStore.get().connected) return
   await chainRead(async () => {
+    const client = await loadClient()
+    if (!client) {
+      chainUnavailable = 'client'
+      console.error('trading client unavailable; pool state not read')
+      reportChainUnavailable()
+      return
+    }
     try {
-      const [{ decodePoolState }, { AccountId }, client] = await Promise.all([
+      const [{ decodePoolState }, { AccountId }] = await Promise.all([
         xykModule(),
         sdkModule(),
-        getClient(),
       ])
       // Sync first: the local store is a cache of chain state.
       await client.syncChain()
@@ -270,6 +321,7 @@ async function loadState(): Promise<void> {
       // quote reads the store. Both must see the same account.
       const account = await getFreshAccount(AccountId.fromHex(withHexPrefix(poolIdHex)))
       currentState = decodePoolState(account)
+      chainUnavailable = null
       poolError.hidden = true
       populateSwapSide()
       await recomputeQuotes()
@@ -278,9 +330,8 @@ async function loadState(): Promise<void> {
       // The detail is for the console; the page states the effect, not the cause.
       // A transient sync failure must not hide the state the page already has.
       console.error('pool state read failed', error)
-      if (!currentState) {
-        showPoolError('Pool state is unavailable right now. Reload to try again.')
-      }
+      chainUnavailable = 'state'
+      reportChainUnavailable()
     }
   })
 }
@@ -621,15 +672,38 @@ async function renderHistory(samples: IndexerSnapshot[]): Promise<void> {
   if (empty) setText(historyNote, 'No price history yet.')
 }
 
+/**
+ * The samples where the pool changed.
+ *
+ * The indexer writes a point every poll so the chart's last bucket advances,
+ * and an idle pool's points all carry the time of its last change. As rows they
+ * would repeat one timestamp, so the table lists changes and the chart keeps
+ * every bucket.
+ */
+function historyChanges(samples: IndexerSnapshot[]): IndexerSnapshot[] {
+  const changes: IndexerSnapshot[] = []
+  for (const sample of samples) {
+    const previous = changes[changes.length - 1]
+    const unchanged =
+      previous !== undefined &&
+      previous.reserve0 === sample.reserve0 &&
+      previous.reserve1 === sample.reserve1 &&
+      previous.lp_supply === sample.lp_supply
+    if (!unchanged) changes.push(sample)
+  }
+  return changes
+}
+
 function renderHistoryTable(samples: IndexerSnapshot[]): void {
   clear(historyRows)
   const view = record
-  if (samples.length === 0 || !view) {
+  const changes = historyChanges(samples)
+  if (changes.length === 0 || !view) {
     historyTable.hidden = true
     return
   }
   historyTable.hidden = false
-  for (const sample of samples.slice(-HISTORY_ROWS).reverse()) {
+  for (const sample of changes.slice(-HISTORY_ROWS).reverse()) {
     const scaled = priceScaled(sample, view.token0Decimals, view.token1Decimals)
     const row = el('tr')
     row.append(

@@ -31,6 +31,18 @@ export function xykModule(): Promise<typeof import('@port0.sh/sdk')> {
 /** The resolved XYK SDK module namespace. */
 export type XykModule = typeof import('@port0.sh/sdk')
 
+/**
+ * Drops the shared client so the next call builds it again.
+ *
+ * `getClient` memoises its promise, so a failed initialisation would otherwise
+ * be permanent for the life of the page. A caller that retries after a load
+ * failure calls this first.
+ */
+export function resetClient(): void {
+  midenClient = null
+  xykClient = null
+}
+
 /** Returns the shared MidenClient, creating it on first call. */
 export async function getClient(): Promise<MidenClient> {
   midenClient ??= (async () => {
