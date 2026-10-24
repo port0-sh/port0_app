@@ -19,6 +19,7 @@ import {
   isHexId,
   normalizeHex,
   parseAmount,
+  shortAddress,
   shortHex,
 } from '../lib/format'
 import { formatScaled, priceScaled } from '../lib/history'
@@ -427,13 +428,9 @@ function poolRow(pool: IndexerPool): HTMLTableRowElement {
     el(
       'td',
       {},
-      // Stretched over the row, so the whole row opens the pool rather than the
-      // pair name alone.
-      el('a', {
-        class: 'row-link',
-        href: link,
-        'aria-label': `Open ${view.token0Symbol} / ${view.token1Symbol}`,
-      }),
+      // A pointer target over the whole row for a mouse. It carries no name of
+      // its own: the link in the last cell is the row's one accessible link.
+      el('a', { class: 'row-link', href: link, tabindex: -1, 'aria-hidden': 'true' }),
       el('span', { class: 'pair' }, `${view.token0Symbol} / ${view.token1Symbol}`),
       el('span', { class: 'sub mono', title: id }, shortHex(id)),
     ),
@@ -471,7 +468,22 @@ function poolRow(pool: IndexerPool): HTMLTableRowElement {
       el('span', { class: 'figure' }, formatBps(BigInt(pool.lp_fee_bps))),
     ),
     feeAprCell(pool),
-    el('td', { class: 'open-col' }, el('span', { class: 'open', 'aria-hidden': 'true' }, '→')),
+    // The arrow on a table row, a button on a card: the one link per row, so the
+    // card itself stays free for selecting an amount or copying the pool id.
+    el(
+      'td',
+      { class: 'open-col' },
+      el(
+        'a',
+        {
+          class: 'open-btn',
+          href: link,
+          'aria-label': `Open ${view.token0Symbol} / ${view.token1Symbol}`,
+        },
+        el('span', { class: 'open-label' }, 'Open pool'),
+        el('span', { class: 'open', 'aria-hidden': 'true' }, '→'),
+      ),
+    ),
   )
 }
 
@@ -782,7 +794,7 @@ function renderRouteTokens(): void {
     // options are appended; an empty card must stay empty.
     select.append(el('option', { value: '' }, 'Select token'))
     for (const [id, meta] of options) {
-      select.append(el('option', { value: id }, `${meta.symbol} ${shortHex(id)}`))
+      select.append(el('option', { value: id }, `${meta.symbol} ${shortAddress(id)}`))
     }
   }
   // No auto-selection: an empty card starts empty. A selected token survives a
@@ -883,7 +895,7 @@ function routeFee(
 
 /** The route path in token symbols, the way the quote's Route row shows it. */
 function routePath(route: Route): string {
-  const symbolOf = (id: string): string => routeTokenMeta(id)?.symbol ?? shortHex(id)
+  const symbolOf = (id: string): string => routeTokenMeta(id)?.symbol ?? shortAddress(id)
   return routeTokens(route).map(symbolOf).join(' → ')
 }
 
@@ -892,7 +904,7 @@ function routePath(route: Route): string {
  * bold, so the wallet prompt and the path agree.
  */
 function renderRouteProgress(route: Route, activeHop: number, message: string): void {
-  const symbolOf = (id: string): string => routeTokenMeta(id)?.symbol ?? shortHex(id)
+  const symbolOf = (id: string): string => routeTokenMeta(id)?.symbol ?? shortAddress(id)
   const tokens = routeTokens(route)
   const nodes: Child[] = []
   for (let index = 0; index < tokens.length; index += 1) {
@@ -916,7 +928,7 @@ function renderSwapReceipt(route: Route, result: RouteResult): void {
   const metaIn = routeTokenMeta(route.hops[0].tokenIn)
   const metaOut = routeTokenMeta(route.hops[route.hops.length - 1].tokenOut)
   if (!metaIn || !metaOut) return
-  const symbolOf = (id: string): string => routeTokenMeta(id)?.symbol ?? shortHex(id)
+  const symbolOf = (id: string): string => routeTokenMeta(id)?.symbol ?? shortAddress(id)
   // The last hop's output is the quote: no read of the wallet happens after it,
   // because the output note arrives on its own schedule.
   const last = result.hops[result.hops.length - 1]
@@ -1235,14 +1247,14 @@ mountTokenCombo(
   routeTokenInInput,
   routeTokenIn,
   payTokenSource,
-  (id) => routeTokenMeta(id)?.symbol ?? shortHex(id),
+  (id) => routeTokenMeta(id)?.symbol ?? shortAddress(id),
   onPayTokenChanged,
 )
 const routeOutCombo = mountTokenCombo(
   routeTokenOutInput,
   routeTokenOut,
   receiveTokenSource,
-  (id) => routeTokenMeta(id)?.symbol ?? shortHex(id),
+  (id) => routeTokenMeta(id)?.symbol ?? shortAddress(id),
   onInputsChanged,
 )
 // The token list follows the connected address, not every store update. The

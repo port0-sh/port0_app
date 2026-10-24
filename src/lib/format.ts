@@ -31,6 +31,11 @@ export function withHexPrefix(value: string): string {
 /** "0x1234…cdef" for long hex ids. */
 export function shortHex(value: string, head = 6, tail = 4): string {
   const hex = normalizeHex(value)
+  // A value that is not hex is an address in another notation, and only its own
+  // formatter knows which characters tell two apart. Prefixing a bech32 address
+  // with 0x would also hide them: every address shares that prefix and its
+  // routing suffix, so every token would read the same.
+  if (!/^[0-9a-f]+$/.test(hex)) return shortAddress(value)
   if (hex.length <= head + tail) return `0x${hex}`
   return `0x${hex.slice(0, head)}…${hex.slice(-tail)}`
 }

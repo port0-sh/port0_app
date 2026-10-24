@@ -42,6 +42,13 @@ describe('shortHex', () => {
   it('returns short ids whole', () => {
     expect(shortHex('0xabcd')).toBe('0xabcd')
   })
+
+  it('renders a bech32 id as an address, never as a 0x string', () => {
+    // Two faucets of the same kind. As hex they would collide: both carry the
+    // node prefix and the routing suffix, so both read `0xmtst1a…wr6w`.
+    expect(shortHex('mtst1aq80tyvprm8zc5fr0xfxuv46yvmfxrem_qr7qqq9wr6w')).toBe('…mfxrem')
+    expect(shortHex('mtst1az5hm04mhc8wjyf0zmugqmmx6upczkm9_qr7qqq9wr6w')).toBe('…pczkm9')
+  })
 })
 
 describe('shortAddress', () => {

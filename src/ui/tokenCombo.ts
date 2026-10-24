@@ -7,7 +7,7 @@
  */
 
 import { clear, el } from '../lib/dom'
-import { formatAmount, shortHex } from '../lib/format'
+import { formatAmount, shortAddress } from '../lib/format'
 
 /** One selectable token: what the dropdown shows and the amount math needs. */
 export interface TokenEntry {
@@ -103,7 +103,9 @@ export function mountTokenCombo(
           'span',
           { class: 'token-combo-name' },
           el('span', { class: 'token-combo-symbol' }, meta.symbol),
-          el('span', { class: 'token-combo-id mono' }, shortHex(id)),
+          // The id, not a hex fragment: a bech32 id keeps its own characters
+          // before the routing suffix, which is what tells two tokens apart.
+          el('span', { class: 'token-combo-id mono' }, shortAddress(id)),
         ),
         meta.amount === undefined
           ? null

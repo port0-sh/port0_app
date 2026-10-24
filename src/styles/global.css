@@ -1112,9 +1112,26 @@ dialog.alpha-gate li {
   width: 2ch;
 }
 
+/* The link is the arrow here and a named button on a card. */
+.open-col a {
+  color: inherit;
+  font-weight: inherit;
+  text-decoration: none;
+}
+
+.open-col a:focus-visible {
+  outline: 1px solid var(--green);
+  outline-offset: 2px;
+}
+
 .open {
   color: var(--dark-grey);
   font-size: 1.2em;
+}
+
+/* The word only appears on a card, where the link is a button. */
+.open-label {
+  display: none;
 }
 
 .pool-table tbody tr:hover .open,
@@ -1136,8 +1153,9 @@ dialog.alpha-gate li {
 
   /*
    * The pool list becomes cards below the width where the columns stop
-   * fitting: one card per pool, a label and a right-aligned value per row, and
-   * the whole card still opens the pool through the stretched row link.
+   * fitting: a header with the pair and the price, then a two-column grid of
+   * reserves, volume, and fees under one card border. The card carries the
+   * frame; a rule between every section would read as a maze of lines.
    */
   #pool-table {
     max-height: none;
@@ -1148,6 +1166,21 @@ dialog.alpha-gate li {
     display: none;
   }
 
+  /*
+   * The cells are grid items here, but the table still carries the collapsed
+   * border model, and an engine may paint its computed cell edges as short
+   * rules inside the card. Separate borders leave the card frame as the only
+   * line, and the cells draw none of their own.
+   */
+  .pool-table {
+    border-collapse: separate;
+  }
+
+  .pool-table th,
+  .pool-table td {
+    border: 0;
+  }
+
   .pool-table tbody,
   .pool-table tr,
   .pool-table td {
@@ -1156,50 +1189,151 @@ dialog.alpha-gate li {
   }
 
   .pool-table tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    row-gap: 0.9rem;
     border: 1px solid var(--dark-grey);
-    padding: 0.6rem 1.5ch 0.75rem;
-    margin-bottom: 0.75rem;
+    padding: 0.85rem 0;
+    margin-bottom: 0.85rem;
   }
 
+  /*
+   * No cell borders: the global `td` rule draws a bottom border per cell, which
+   * on a grid becomes one short inset line per column. A cell's rule belongs to
+   * a table; here the card's own border is the only line.
+   */
   .pool-table td {
-    display: grid;
-    grid-template-columns: minmax(11ch, auto) 1fr;
-    column-gap: 1ch;
-    align-items: baseline;
-    padding: 0.15rem 0;
+    min-width: 0;
+    padding: 0 1.5ch;
+    border: 0;
     text-align: left;
   }
 
+  .pool-table td.num {
+    text-align: left;
+  }
+
+  /* A small-caps label over each stat, so a cell reads as a block. */
   .pool-table td::before {
     content: attr(data-label);
-    grid-column: 1;
-    color: var(--light-grey);
-    font-size: 0.85em;
-  }
-
-  .pool-table td > * {
-    grid-column: 2;
-    justify-self: end;
-    text-align: right;
-  }
-
-  /* The pair heads the card, so it takes the full width and no label. */
-  .pool-table td:first-child {
     display: block;
-    padding: 0 0 0.35rem;
+    margin-bottom: 0.3rem;
+    color: var(--light-grey);
+    font-size: 0.7em;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* Header: the pair on the left, the price as the card's one large figure. */
+  .pool-table td:first-child {
+    grid-column: 1;
+    grid-row: 1;
   }
 
   .pool-table td:first-child::before {
     content: none;
   }
 
-  /* Volume has room on a card, so it comes back. */
-  .pool-table .hide-sm {
-    display: grid;
+  .pool-table td[data-label='Price'] {
+    grid-column: 2;
+    grid-row: 1;
+    text-align: right;
+  }
+
+  .pool-table td[data-label='Price']::before {
+    content: none;
+  }
+
+  .pool-table td[data-label='Price'] .figure {
+    font-size: 1.15em;
+  }
+
+  .pool-table td[data-label='Reserves'],
+  .pool-table td[data-label='Fee'] {
+    grid-column: 1;
+  }
+
+  .pool-table td[data-label='Reserves'],
+  .pool-table td[data-label='Volume 24h'] {
+    grid-row: 2;
+  }
+
+  .pool-table td[data-label='Fee'],
+  .pool-table td[data-label='Fee APR'] {
+    grid-row: 3;
+  }
+
+  .pool-table td[data-label='Volume 24h'],
+  .pool-table td[data-label='Fee APR'] {
+    grid-column: 2;
+  }
+
+  /* The window belongs to the APR, not to a line of its own. */
+  .pool-table td[data-label='Fee APR'] .figure {
+    display: inline;
+  }
+
+  .pool-table td[data-label='Fee APR'] .sub {
+    display: inline;
+    margin-left: 0.6ch;
+  }
+
+  /* A figure that no longer fits its column wraps instead of crossing it. */
+  .pool-table .line {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* Volume has room on a card, so it comes back. Scoped to the cell: the
+     header cell of the same class sits in the hidden head. */
+  .pool-table td.hide-sm {
+    display: block;
+  }
+
+  /*
+   * A card is not a click target: selecting an amount or copying the pool id
+   * must not open the pool. The row's link is the control at the card's foot,
+   * and it is a link rather than a button so the card keeps one border.
+   */
+  .pool-table .row-link {
+    display: none;
   }
 
   .pool-table .open-col {
-    display: none;
+    grid-column: 1 / -1;
+    grid-row: 4;
+    width: auto;
+  }
+
+  .pool-table .open-col a {
+    display: block;
+    padding: 0.35em 0;
+    color: var(--green);
+    font-weight: bold;
+  }
+
+  .pool-table .open-label {
+    display: inline;
+  }
+
+  .pool-table .open {
+    color: var(--green);
+    font-size: 1em;
+  }
+}
+
+/*
+ * The narrowest phones leave a stat column under twelve characters wide, where
+ * a six-letter symbol breaks mid-word; one step down keeps it whole.
+ */
+@media (max-width: 360px) {
+  .pool-table td {
+    padding: 0 1ch;
+  }
+
+  .pool-table .line {
+    font-size: 0.9em;
   }
 }
 
