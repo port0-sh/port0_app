@@ -1040,6 +1040,10 @@ dialog.alpha-gate li {
   max-height: none;
 }
 
+.pool-table {
+  width: 100%;
+}
+
 .pool-table th.num,
 .pool-table td.num {
   text-align: right;
@@ -1057,7 +1061,6 @@ dialog.alpha-gate li {
 .pool-table .pair {
   display: block;
   font-weight: bold;
-  white-space: nowrap;
   color: var(--green);
 }
 
@@ -1067,9 +1070,22 @@ dialog.alpha-gate li {
   font-weight: bold;
 }
 
+/*
+ * The table fills the panel and the pair and sub lines wrap rather than widen
+ * it. A number and its symbol stay on one line: a wrapped `2.1B POHOPPEMICO`
+ * reads as two figures.
+ */
 .pool-table .line {
   display: block;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pool-table .sub {
+  white-space: normal;
+}
+
+.pool-table th {
   white-space: nowrap;
 }
 
@@ -1106,7 +1122,7 @@ dialog.alpha-gate li {
   color: var(--green);
 }
 
-@media (max-width: 700px) {
+@media (max-width: 820px) {
   .hide-sm {
     display: none;
   }
@@ -1116,6 +1132,74 @@ dialog.alpha-gate li {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.35rem;
+  }
+
+  /*
+   * The pool list becomes cards below the width where the columns stop
+   * fitting: one card per pool, a label and a right-aligned value per row, and
+   * the whole card still opens the pool through the stretched row link.
+   */
+  #pool-table {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .pool-table thead {
+    display: none;
+  }
+
+  .pool-table tbody,
+  .pool-table tr,
+  .pool-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .pool-table tbody tr {
+    border: 1px solid var(--dark-grey);
+    padding: 0.6rem 1.5ch 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .pool-table td {
+    display: grid;
+    grid-template-columns: minmax(11ch, auto) 1fr;
+    column-gap: 1ch;
+    align-items: baseline;
+    padding: 0.15rem 0;
+    text-align: left;
+  }
+
+  .pool-table td::before {
+    content: attr(data-label);
+    grid-column: 1;
+    color: var(--light-grey);
+    font-size: 0.85em;
+  }
+
+  .pool-table td > * {
+    grid-column: 2;
+    justify-self: end;
+    text-align: right;
+  }
+
+  /* The pair heads the card, so it takes the full width and no label. */
+  .pool-table td:first-child {
+    display: block;
+    padding: 0 0 0.35rem;
+  }
+
+  .pool-table td:first-child::before {
+    content: none;
+  }
+
+  /* Volume has room on a card, so it comes back. */
+  .pool-table .hide-sm {
+    display: grid;
+  }
+
+  .pool-table .open-col {
+    display: none;
   }
 }
 

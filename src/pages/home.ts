@@ -418,6 +418,8 @@ function poolRow(pool: IndexerPool): HTMLTableRowElement {
     return el('tr', {}, el('td', { colspan: 7, class: 'muted' }, shortHex(id)))
   }
   const price = poolPrice(pool, view)
+  const reserve0 = BigInt(pool.reserve0)
+  const reserve1 = BigInt(pool.reserve1)
 
   return el(
     'tr',
@@ -437,23 +439,37 @@ function poolRow(pool: IndexerPool): HTMLTableRowElement {
     ),
     el(
       'td',
-      { class: 'num' },
+      { class: 'num', 'data-label': 'Price' },
       el('span', { class: 'figure' }, price ?? '—'),
       price === null ? null : el('span', { class: 'sub' }, `${view.token1Symbol} per ${view.token0Symbol}`),
     ),
+    // Compact, because the exact reserves of two tokens set the width of the
+    // whole table; the exact amount is the tooltip.
     el(
       'td',
-      { class: 'num' },
-      line(formatAmount(BigInt(pool.reserve0), view.token0Decimals), view.token0Symbol),
-      line(formatAmount(BigInt(pool.reserve1), view.token1Decimals), view.token1Symbol),
+      { class: 'num', 'data-label': 'Reserves' },
+      line(
+        compactAmount(reserve0, view.token0Decimals),
+        view.token0Symbol,
+        `${formatAmount(reserve0, view.token0Decimals)} ${view.token0Symbol}`,
+      ),
+      line(
+        compactAmount(reserve1, view.token1Decimals),
+        view.token1Symbol,
+        `${formatAmount(reserve1, view.token1Decimals)} ${view.token1Symbol}`,
+      ),
     ),
     el(
       'td',
-      { class: 'num hide-sm' },
+      { class: 'num hide-sm', 'data-label': 'Volume 24h' },
       line(compactAmount(BigInt(pool.volume_24h_0), view.token0Decimals), view.token0Symbol),
       line(compactAmount(BigInt(pool.volume_24h_1), view.token1Decimals), view.token1Symbol),
     ),
-    el('td', { class: 'num' }, el('span', { class: 'figure' }, formatBps(BigInt(pool.lp_fee_bps)))),
+    el(
+      'td',
+      { class: 'num', 'data-label': 'Fee' },
+      el('span', { class: 'figure' }, formatBps(BigInt(pool.lp_fee_bps))),
+    ),
     feeAprCell(pool),
     el('td', { class: 'open-col' }, el('span', { class: 'open', 'aria-hidden': 'true' }, '→')),
   )
@@ -468,11 +484,15 @@ function feeAprCell(pool: IndexerPool): HTMLTableCellElement {
   // `> 0` rather than `=== 0`: an indexer from before this field existed sends
   // nothing, and a missing window is not a measured zero.
   if (!(pool.fee_apr_window_secs > 0)) {
-    return el('td', { class: 'num' }, el('span', { class: 'figure muted' }, '—'))
+    return el(
+      'td',
+      { class: 'num', 'data-label': 'Fee APR' },
+      el('span', { class: 'figure muted' }, '—'),
+    )
   }
   return el(
     'td',
-    { class: 'num' },
+    { class: 'num', 'data-label': 'Fee APR' },
     el(
       'span',
       { class: 'figure accent' },
@@ -592,9 +612,9 @@ function renderStats(): void {
   syncStatsHeight()
 }
 
-/** One amount per line inside a cell. */
-function line(amount: string, symbol: string): Child {
-  return el('span', { class: 'line' }, `${amount} ${symbol}`)
+/** One amount per line inside a cell. `title` carries the exact amount. */
+function line(amount: string, symbol: string, title?: string): Child {
+  return el('span', { class: 'line', title }, `${amount} ${symbol}`)
 }
 
 /** Token metadata from the indexed pools: symbol and decimals by faucet id. */
