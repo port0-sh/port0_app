@@ -11,6 +11,8 @@
 const SOUND_KEY = 'port0-app:sound:v1'
 /** Served from `public/`, so the URL is stable and cached. */
 const BELL_URL = '/bell.mp3'
+/** Playback level: three quarters below the recording's own level. */
+const BELL_VOLUME = 0.25
 
 /** True unless the user turned the bell off. Storage failure means on. */
 export function soundEnabled(): boolean {
@@ -37,6 +39,7 @@ function bell(): HTMLAudioElement | null {
   if (typeof Audio === 'undefined') return null
   element = new Audio(BELL_URL)
   element.preload = 'auto'
+  element.volume = BELL_VOLUME
   return element
 }
 
