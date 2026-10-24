@@ -1,80 +1,21 @@
 /**
- * Branding.
- *
- * The brand name, the text mark, and the slogan come from configuration. The two
- * drawings are files meant to be edited by hand:
- *
- *   src/assets/branding/hero.html   the home page hero
- *   src/assets/branding/logo.html   the mark in the header of the other pages
- *
- * Both are inserted as they stand: nothing here parses, splits, or reassembles a
- * drawing, and a drawing carries its own `<style>` when it needs motion.
+ * The home page hero is static markup, inlined by `vite.config.ts` from
+ * `src/assets/branding/hero.html`; the header mark and the brand text are
+ * inlined there too. This module only rebuilds the banner's scroll extent after
+ * aahub_light replaces the font's fallback face.
  */
-
-import { CONFIG } from './config'
-
-/** Lazy, so a page fetches only the drawing it shows. */
-const drawings = import.meta.glob('../assets/branding/*.html', {
-  query: '?raw',
-  import: 'default',
-}) as Record<string, () => Promise<string>>
-
-/** Renders the brand slots a page provides: the hero, the mark, the heading. */
-export function mountBrand(): void {
-  renderHeading()
-  void renderLogo()
-  void renderHero()
-}
-
-/** Fills the home page's name and slogan when the page provides slots for them. */
-function renderHeading(): void {
-  const heading = document.getElementById('brand-heading')
-  if (heading) heading.textContent = CONFIG.brand.name
-  const slogan = document.getElementById('brand-slogan')
-  if (!slogan) return
-  slogan.textContent = CONFIG.brand.slogan
-  slogan.hidden = CONFIG.brand.slogan.length === 0
-}
 
 /**
- * Replaces the header mark with `logo.html` when the deployment ships one. An
- * empty file leaves the markup the page shipped with, so a header never depends
- * on JavaScript to appear.
+ * iOS WebKit keeps the fallback grid's width in the scroller after the swap,
+ * which leaves the drawing clipped until the page is scrolled. The scroller is
+ * rebuilt within one task, so no intermediate frame is painted.
  */
-async function renderLogo(): Promise<void> {
-  const host = document.querySelector<HTMLElement>('.brand')
-  const mark = host?.querySelector('.brand-mark')
-  const name = host?.querySelector('.brand-name')
-  if (!host || !mark || !name) return
-
-  const html = await load('logo')
-  if (html.trim().length > 0) mark.replaceWith(...fragment(html))
-  name.textContent = CONFIG.brand.logoText || CONFIG.brand.name
-  host.setAttribute('aria-label', CONFIG.brand.name)
-}
-
-/**
- * Fills `#site-banner` with `hero.html`, or with the logo when the hero is
- * empty, so a deployment that ships no hero still shows a mark.
- */
-async function renderHero(): Promise<void> {
-  const host = document.querySelector<HTMLElement>('#site-banner')
-  if (!host) return
-  const hero = await load('hero')
-  const html = hero.trim().length > 0 ? hero : await load('logo')
-  host.innerHTML = html
-  host.hidden = html.trim().length === 0
-}
-
-/** Raw text of a drawing slot, empty when none ships. */
-async function load(slot: 'hero' | 'logo'): Promise<string> {
-  const loader = drawings[`../assets/branding/${slot}.html`]
-  return loader ? await loader() : ''
-}
-
-/** The nodes of a markup fragment, without a wrapper element. */
-function fragment(html: string): Node[] {
-  const template = document.createElement('template')
-  template.innerHTML = html
-  return [...template.content.childNodes]
+export function settleBannerFont(): void {
+  const host = document.getElementById('site-banner')
+  if (!host?.querySelector('.banner-source')) return
+  void document.fonts.load('14px "aahub_light"').then(() => {
+    host.style.overflowX = 'hidden'
+    void host.offsetWidth
+    host.style.overflowX = ''
+  })
 }

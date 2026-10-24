@@ -108,18 +108,15 @@ export const CONFIG = {
   chainPrefix: DEFAULTS.chainPrefix,
 
   /**
-   * Branding. The name, the text mark, and the slogan come from env vars rather
-   * than being written into the pages; the two drawings are files.
+   * Branding. The name and text mark come from env vars rather than being
+   * written into the pages. The slogan, the header logo text, and both drawings
+   * are inlined at build time by `vite.config.ts`.
    */
   brand: {
     /** Wordmark and page-title name. */
     name: import.meta.env.VITE_BRAND_NAME?.trim() || 'port0.sh',
     /** Text form of the mark, used in page titles the app sets at runtime. */
     markText: import.meta.env.VITE_BRAND_MARK_TEXT?.trim() || '[p0]',
-    /** Single-line text mark beside the header logo. */
-    logoText: import.meta.env.VITE_BRAND_LOGO_TEXT?.trim() ?? '',
-    /** One line under the name on the home page; hidden when empty. */
-    slogan: import.meta.env.VITE_BRAND_SLOGAN?.trim() ?? '',
   },
 
   /**

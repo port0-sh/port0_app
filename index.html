@@ -11,6 +11,9 @@
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <!-- The index hero is an ASCII-art grid drawn for aahub_light; preload the face
+       so the drawing swaps to it as early as possible. -->
+  <link rel="preload" href="/fonts/aahub_light.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="manifest" href="/site.webmanifest" />
 
   <meta property="og:site_name" content="%VITE_BRAND_NAME%" />
@@ -81,8 +84,11 @@
         <a href="/about.html">About</a>
         <a href="https://docs.port0.sh">Docs</a>
       </nav>
-      <div class="wallet" id="wallet" aria-live="polite">
-        <button type="button" class="btn btn-primary">Login</button>
+      <div class="header-tools">
+        <div class="wallet" id="wallet" aria-live="polite">
+          <button type="button" class="btn btn-primary">Login</button>
+        </div>
+        <button type="button" class="btn sound-toggle" id="sound-toggle" aria-pressed="true" aria-label="Arrival bell on" title="Arrival bell on">🔊</button>
       </div>
     </div>
 
