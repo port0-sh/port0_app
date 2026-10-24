@@ -967,7 +967,7 @@ dialog.modal::backdrop {
 #alpha-notice {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 1rem;
   flex-wrap: wrap;
   width: 100%;
@@ -977,11 +977,11 @@ dialog.modal::backdrop {
   border-bottom: 1px solid var(--dark-grey);
   background-color: var(--darkest-green);
   font-size: 0.85em;
+  text-align: center;
 }
 
 #alpha-notice p {
   margin: 0;
-  max-width: 74ch;
 }
 
 /* One paragraph per network; the head script sets `data-network`. */
@@ -1211,6 +1211,17 @@ dialog.alpha-gate li {
 }
 
 .attribution a:hover {
+  color: var(--green);
+}
+
+/* The legal links match the chart attribution: grey and unemphasised. */
+.legal a {
+  color: var(--light-grey);
+  font-weight: normal;
+  text-decoration: none;
+}
+
+.legal a:hover {
   color: var(--green);
 }
 

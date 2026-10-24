@@ -25,10 +25,17 @@ const SOCIALS: ReadonlyArray<{ label: string; href: string }> = [
   { label: 'GitHub', href: 'https://github.com/port0-sh' },
 ]
 
+/** Legal documents. Declared once; every page footer follows. */
+const LEGAL: ReadonlyArray<{ label: string; href: string }> = [
+  { label: 'Terms of Service', href: 'https://docs.port0.sh/legal/terms.html' },
+  { label: 'Privacy Policy', href: 'https://docs.port0.sh/legal/privacy.html' },
+]
+
 export function mountSite(): void {
   mountBrand()
   setFooterYear()
   setFooterSocials()
+  setFooterLegal()
   setChartAttribution()
   mountNotice()
   mountSoundToggle()
@@ -105,6 +112,20 @@ function setFooterSocials(): void {
   footer.append(wrap)
 }
 
+/**
+ * Appends the legal links to the footer, after the socials and before the
+ * chart attribution.
+ */
+function setFooterLegal(): void {
+  const footer = document.querySelector('.footer')
+  if (!footer || footer.querySelector('.legal')) return
+  const wrap = el('span', { class: 'legal' })
+  for (const { label, href } of LEGAL) {
+    wrap.append(' · ', el('a', { href, rel: 'noopener', target: '_blank' }, label))
+  }
+  footer.append(wrap)
+}
+
 function setFooterYear(): void {
   const year = document.getElementById('footer-year')
   if (year) year.textContent = String(new Date().getFullYear())
@@ -162,7 +183,7 @@ function mountAlphaGate(): void {
   const accept = el(
     'button',
     { type: 'button', class: 'btn btn-primary', id: 'alpha-accept' },
-    'I understand and accept',
+    'I accept the Terms',
   )
   accept.addEventListener('click', () => {
     acceptAlpha()
@@ -171,30 +192,49 @@ function mountAlphaGate(): void {
   })
 
   dialog.append(
-    el('h2', {}, 'Closed alpha'),
+    el('h2', {}, 'Closed alpha: real funds'),
     el(
       'p',
       {},
-      `${CONFIG.brand.name} runs on the Miden partner mainnet. Balances are real funds.`,
+      `${CONFIG.brand.name} runs on the Miden partner mainnet. The software is experimental and unaudited.`,
     ),
     el(
       'ul',
       {},
-      el('li', {}, 'The contracts are unaudited and can change.'),
-      el('li', {}, 'Transactions are irreversible. There is no support desk and no refund.'),
-      el('li', {}, 'Network and application fees are non-refundable.'),
-      el('li', {}, 'The pools are experimental and can lose value.'),
+      el(
+        'li',
+        {},
+        'You can lose every fund you deposit. Transactions are irreversible: no refund, no chargeback, no recovery of lost keys.',
+      ),
+      el(
+        'li',
+        {},
+        `The software is provided as is, without warranty. To the maximum extent permitted by law, ${CONFIG.brand.name} and its contributors are not liable for any loss you suffer.`,
+      ),
+      el(
+        'li',
+        {},
+        'Listing is permissionless. The registry vets no token: a listed token can be worthless or mintable without limit by its creator.',
+      ),
+      el('li', {}, 'Nothing here is financial, investment, legal, or tax advice.'),
     ),
     el(
       'p',
       {},
-      'The ',
+      'By continuing you accept the ',
       el(
         'a',
-        { href: 'https://docs.port0.sh/app/alpha-risk.html', target: '_blank', rel: 'noopener' },
-        'risk notice',
+        { href: 'https://docs.port0.sh/legal/terms.html', target: '_blank', rel: 'noopener' },
+        'Terms of Service',
       ),
-      ' states the full terms. Read it before depositing.',
+      ', including the assumption of risk and the limitation of liability, and you '
+        + 'acknowledge the ',
+      el(
+        'a',
+        { href: 'https://docs.port0.sh/legal/privacy.html', target: '_blank', rel: 'noopener' },
+        'Privacy Policy',
+      ),
+      '.',
     ),
     el('div', { class: 'form-actions' }, accept),
   )
