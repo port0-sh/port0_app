@@ -21,8 +21,7 @@ import { chainNetworkId } from '../lib/network'
 import { qs, setText } from '../lib/dom'
 import { DEFAULT_LP_FEE_BPS, POOL_DEPLOY_FEE_BASE_UNITS } from '../lib/fees'
 import type { RegistryFeePolicy } from '@port0.sh/sdk'
-import { formatBps, isHexId, normalizeHex, shortHex, withHexPrefix } from '../lib/format'
-import { fetchPools } from '../lib/indexer'
+import { formatBps, isHexId, shortHex, withHexPrefix } from '../lib/format'
 
 import { mountSite } from '../lib/site'
 import { toast } from '../ui/toast'
@@ -55,40 +54,11 @@ const token1Select = qs<HTMLSelectElement>(document, '#param-token1-select')
 // their controls: the selection updates the inputs directly. Each field's
 // dropdown excludes the token the other field holds, so the same faucet cannot
 // be picked twice.
-/** Ids of accounts that are pools. A pool account is its own LP faucet. */
-const poolFaucets = new Set<string>()
-
-async function loadPoolFaucets(): Promise<void> {
-  if (CONFIG.indexerUrl.length === 0) return
-  try {
-    let cursor: string | null = null
-    for (let page = 0; page < 5; page += 1) {
-      const result = await fetchPools(CONFIG.indexerUrl, { cursor, limit: 200 })
-      for (const pool of result.pools) poolFaucets.add(normalizeHex(pool.id))
-      cursor = result.nextCursor
-      if (cursor === null) break
-    }
-  } catch (error) {
-    console.warn(
-      '[indexer] pool list failed; LP tokens may appear in the token pickers:',
-      error,
-    )
-  }
-}
-
 const token0Picker = mountTokenPicker('param-token0-select', {
   exclude: () => token1Select.value || null,
-  isPoolFaucet: (hexId) => poolFaucets.has(hexId),
 })
 const token1Picker = mountTokenPicker('param-token1-select', {
   exclude: () => token0Select.value || null,
-  isPoolFaucet: (hexId) => poolFaucets.has(hexId),
-})
-
-// The pool list can arrive after the wallet's tokens; repopulate when it does.
-void loadPoolFaucets().then(() => {
-  token0Picker.refresh()
-  token1Picker.refresh()
 })
 
 // Belt and braces: the select's own option is disabled too, which is what a
