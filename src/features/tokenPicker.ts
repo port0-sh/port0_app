@@ -10,9 +10,26 @@
  */
 
 import { getClient, getPublicAccount, sdkModule } from '../lib/client'
-import { formatAmount, shortAddress } from '../lib/format'
+import { formatAmount, isHexId, normalizeHex, shortAddress, withHexPrefix } from '../lib/format'
 import { mountTokenCombo, type TokenEntry } from '../ui/tokenCombo'
 import { requestAssets, walletStore } from '../wallet/wallet'
+
+/**
+ * A faucet id in one form: `0x` and lower-case for hex, the given form
+ * otherwise. The wallet may report either notation for the same faucet.
+ */
+function toHexId(
+  raw: string,
+  AccountId: { fromBech32: (value: string) => { toString: () => string } },
+): string {
+  const value = raw.trim()
+  if (isHexId(value)) return withHexPrefix(normalizeHex(value))
+  try {
+    return AccountId.fromBech32(value).toString()
+  } catch {
+    return value
+  }
+}
 
 export interface TokenPicker {
   /** Selects a faucet id, adding it to the list when the wallet does not hold it. */
@@ -132,7 +149,14 @@ export function mountTokenPicker(
         emptyNote: walletStore.get().connected ? EMPTY_LABEL : LOGIN_LABEL,
       }
     },
-    (id) => entryList.find(([entryId]) => entryId === id)?.[1].symbol ?? shortAddress(id),
+    (id) => {
+      const known = entryList.find(([entryId]) => entryId === id)?.[1].symbol
+      if (known) return known
+      // Before the list loads, an id has no name; a raw fragment in the field
+      // reads as if a token had been chosen. Show the address only once the
+      // list is known not to contain it.
+      return entryList.length === 0 ? '' : shortAddress(id)
+    },
     () => select.dispatchEvent(new Event('change', { bubbles: true })),
   )
 
@@ -191,18 +215,21 @@ export function mountTokenPicker(
         return
       }
 
-      const { BasicFungibleFaucetComponent } = await sdkModule()
+      const { AccountId, BasicFungibleFaucetComponent } = await sdkModule()
       const listed: { id: string; label: string }[] = []
       const comboEntries: Array<[string, TokenEntry]> = []
       let skipped = 0
       for (const asset of assets) {
+        // One form per faucet: the adapter may report hex or bech32, and the
+        // select, the entry list, and a restored draft must agree on the key.
+        const id = toHexId(asset.faucetId, AccountId).trim()
         // Failed reads are not cached: a locked or unsynced wallet can answer on
         // the next populate, and only successes are worth remembering. A faucet
         // that is not basic fungible is cached, because that cannot change.
-        let meta = faucetMeta.get(asset.faucetId)
-        if (!meta && !notFungible.has(asset.faucetId)) {
-          meta = await readFaucetMeta(asset.faucetId, BasicFungibleFaucetComponent)
-          if (meta) faucetMeta.set(asset.faucetId, meta)
+        let meta = faucetMeta.get(id)
+        if (!meta && !notFungible.has(id)) {
+          meta = await readFaucetMeta(id, BasicFungibleFaucetComponent)
+          if (meta) faucetMeta.set(id, meta)
         }
 
         if (!meta) {
@@ -221,11 +248,11 @@ export function mountTokenPicker(
           // The wallet reported something that is not a whole amount.
         }
         listed.push({
-          id: asset.faucetId,
-          label: `${meta.symbol} (${shortAddress(asset.faucetId)}) · ${balance}`,
+          id,
+          label: `${meta.symbol} (${shortAddress(id)}) · ${balance}`,
         })
         comboEntries.push([
-          asset.faucetId,
+          id,
           { symbol: meta.symbol, decimals: meta.decimals, amount: rawAmount },
         ])
       }
@@ -246,13 +273,18 @@ export function mountTokenPicker(
     void populate()
   })
 
-  const setValue = (hex: string): void => {
-    if (!hex) return
-    if (![...select.options].some((option) => option.value === hex)) {
-      select.append(new Option(shortAddress(hex), hex))
-    }
-    select.value = hex
-    combo.refresh()
+  const setValue = (value: string): void => {
+    if (!value) return
+    // A draft may hold either form. Convert off the render path and let the
+    // list populate on its own; the field stays empty until the id has a name.
+    void (async () => {
+      const { AccountId } = await sdkModule()
+      const id = toHexId(value, AccountId)
+      const known = [...select.options].some((option) => option.value === id)
+      if (!known) select.append(new Option(shortAddress(id), id))
+      select.value = id
+      combo.refresh()
+    })()
   }
 
   return { setValue, refresh: () => void populate() }
