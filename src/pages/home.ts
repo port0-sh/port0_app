@@ -225,6 +225,8 @@ async function refresh(options: { manual?: boolean } = {}): Promise<void> {
     renderStats()
     setText(refreshStatus, `updated ${new Date().toLocaleTimeString()}`)
   } catch (error) {
+    // A partial list must not look like a complete one.
+    console.error('[indexer] pool list failed', error)
     if (options.manual) {
       toast(error instanceof Error ? error.message : 'Pool list is unavailable.', 'error')
       setText(refreshStatus, '')
@@ -263,7 +265,16 @@ function renderTable(): void {
     return
   }
 
-  const sorted = [...filtered].sort(comparePools)
+  // Pinned pools first, in the order the deployment lists them, then whatever
+  // sort the reader chose.
+  const pinned = (id: string): number => {
+    const at = CONFIG.pinnedPools.indexOf(id.toLowerCase())
+    return at === -1 ? Number.MAX_SAFE_INTEGER : at
+  }
+  const sorted = [...filtered].sort((left, right) => {
+    const byPin = pinned(left.id) - pinned(right.id)
+    return byPin !== 0 ? byPin : comparePools(left, right)
+  })
   const pages = Math.max(1, Math.ceil(sorted.length / pageSize))
   if (pageIndex >= pages) pageIndex = pages - 1
   const start = pageIndex * pageSize

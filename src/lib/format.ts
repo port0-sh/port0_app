@@ -197,3 +197,21 @@ export function feeSplit(
     share: formatBps(shareBps),
   }
 }
+
+/** The widest slippage the forms accept, in basis points. */
+export const MAX_SLIPPAGE_BPS = 500
+
+/**
+ * Parses a slippage field. The ceiling is a guard, not a default: a bound wide
+ * enough to accept a 99% fill is a bad trade the user cannot see.
+ */
+export function parseSlippageBps(value: string, max: number = MAX_SLIPPAGE_BPS): bigint {
+  if (value.trim() === '') {
+    throw new RangeError(`Slippage must be a whole number of basis points in [0, ${max}].`)
+  }
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > max) {
+    throw new RangeError(`Slippage must be a whole number of basis points in [0, ${max}].`)
+  }
+  return BigInt(parsed)
+}

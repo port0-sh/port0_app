@@ -897,6 +897,14 @@ dialog.modal::backdrop {
   font-size: 0.95em;
 }
 
+/* The same price the other way round, for when token0 is not the one people
+   quote in. */
+.price-now-reverse {
+  width: 100%;
+  color: var(--dark-grey);
+  font-size: 0.85em;
+}
+
 .table-wrap {
   max-height: 24rem;
   overflow: auto;

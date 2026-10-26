@@ -169,6 +169,15 @@ export const CONFIG = {
 
 
   /**
+   * Pool ids the list shows first, in this order, then everything else. For
+   * putting the pairs the exchange wants to lead with above the rest.
+   */
+  pinnedPools: (import.meta.env.VITE_PINNED_POOLS ?? '')
+    .split(',')
+    .map((id: string) => id.trim().toLowerCase())
+    .filter((id: string) => id.length > 0),
+
+  /**
    * Indexer base URL. When set, pool state is read from the indexer in one
    * request instead of one account fetch per pool. Empty keeps the per-pool
    * chain reads.

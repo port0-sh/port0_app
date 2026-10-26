@@ -92,6 +92,7 @@
       <p class="price-now" id="price-now" hidden>
         <span class="price-now-value" id="price-now-value">—</span>
         <span class="price-now-unit" id="price-now-unit"></span>
+        <span class="price-now-reverse" id="price-now-reverse"></span>
       </p>
 
       <div class="boot" id="pool-boot" hidden>
@@ -182,7 +183,7 @@
         <input id="swap-amount" name="amount" type="text" inputmode="decimal" placeholder="0" autocomplete="off" spellcheck="false" required />
 
         <label for="swap-slippage">Slippage (bps)</label>
-        <input id="swap-slippage" name="slippage" type="number" min="0" max="9999" step="1" value="50" required />
+        <input id="swap-slippage" name="slippage" type="number" min="0" max="500" step="1" value="50" required />
 
         <div class="quote-box" id="swap-quote">
           <p class="muted">Enter an amount to see the quote.</p>
@@ -205,7 +206,7 @@
         <input id="add-amount1" name="amount1" type="text" inputmode="decimal" placeholder="0" autocomplete="off" spellcheck="false" required />
 
         <label for="add-slippage">Slippage (bps)</label>
-        <input id="add-slippage" name="slippage" type="number" min="0" max="9999" step="1" value="50" required />
+        <input id="add-slippage" name="slippage" type="number" min="0" max="500" step="1" value="50" required />
 
         <div class="quote-box" id="add-quote">
           <p class="muted">Enter amounts to see the quote.</p>
@@ -225,7 +226,7 @@
         <input id="remove-lp" name="lp" type="text" inputmode="decimal" placeholder="0" autocomplete="off" spellcheck="false" required />
 
         <label for="remove-slippage">Slippage (bps)</label>
-        <input id="remove-slippage" name="slippage" type="number" min="0" max="9999" step="1" value="50" required />
+        <input id="remove-slippage" name="slippage" type="number" min="0" max="500" step="1" value="50" required />
 
         <div class="quote-box" id="remove-quote">
           <p class="muted">Enter an LP amount to see the quote.</p>

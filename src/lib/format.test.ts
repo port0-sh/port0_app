@@ -10,6 +10,7 @@ import {
   explorerAccountUrl,
   feeSplit,
   parseAmount,
+  parseSlippageBps,
   shortAddress,
   shortHex,
   poolPageTitle,
@@ -31,6 +32,26 @@ describe('normalizeHex', () => {
   it('strips 0x prefix and lowercases', () => {
     expect(normalizeHex('0xAB12')).toBe('ab12')
     expect(normalizeHex('  AB12 ')).toBe('ab12')
+  })
+})
+
+describe('parseSlippageBps', () => {
+  it('accepts a bound the form allows', () => {
+    expect(parseSlippageBps('50')).toBe(50n)
+    expect(parseSlippageBps('0')).toBe(0n)
+    expect(parseSlippageBps('500')).toBe(500n)
+  })
+
+  it('refuses a bound wide enough to be a bad fill', () => {
+    // 9,999 bps was accepted before: a 99.99% fill is not a slippage setting.
+    expect(() => parseSlippageBps('9999')).toThrow(RangeError)
+    expect(() => parseSlippageBps('501')).toThrow(RangeError)
+  })
+
+  it('refuses a value that is not a whole non-negative number', () => {
+    expect(() => parseSlippageBps('-1')).toThrow(RangeError)
+    expect(() => parseSlippageBps('1.5')).toThrow(RangeError)
+    expect(() => parseSlippageBps('')).toThrow(RangeError)
   })
 })
 

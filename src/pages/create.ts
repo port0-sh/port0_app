@@ -73,6 +73,8 @@ function syncTokenExclusion(): void {
 }
 token0Select.addEventListener('change', syncTokenExclusion)
 token1Select.addEventListener('change', syncTokenExclusion)
+token0Select.addEventListener('change', () => void reportPairTaken())
+token1Select.addEventListener('change', () => void reportPairTaken())
 const feeTiers = qs<HTMLDivElement>(document, '#fee-tiers')
 const feeBreakdown = qs<HTMLSpanElement>(document, '#param-fee-breakdown')
 
@@ -226,6 +228,58 @@ async function loadRegisterFee(): Promise<bigint> {
   return registryRegisterFee
 }
 
+/** The registry's pool for a pair, or null. Null also means "cannot tell". */
+async function registryPoolForPair(
+  token0: AccountId,
+  token1: AccountId,
+): Promise<AccountId | null> {
+  try {
+    const [{ readRegistryPoolForAssets }, client] = await Promise.all([
+      xykModule(),
+      getClient(),
+    ])
+    const registryId = await parseAccountRef(CONFIG.registryId, 'Registry account id')
+    await client.syncChain()
+    const getAccount = (id: Parameters<typeof getPublicAccount>[0]) => getPublicAccount(id)
+    return await readRegistryPoolForAssets(getAccount, registryId, token0, token1)
+  } catch (error) {
+    console.warn('registry pair read failed', error)
+    return null
+  }
+}
+
+/**
+ * Names the pool that already holds this pair, if one does.
+ *
+ * The registry admits one pool per pair, so a second attempt spends the funding
+ * and the deploy transaction before the register note is rejected.
+ */
+async function reportPairTaken(): Promise<void> {
+  const notice = qs<HTMLParagraphElement>(document, '#param-pair-taken')
+  if (!token0Select.value || !token1Select.value) {
+    notice.hidden = true
+    return
+  }
+  try {
+    const token0 = await parseAccountRef(token0Select.value, 'Token 0 faucet id')
+    const token1 = await parseAccountRef(token1Select.value, 'Token 1 faucet id')
+    const pool = await registryPoolForPair(token0, token1)
+    if (!pool) {
+      notice.hidden = true
+      return
+    }
+    notice.hidden = false
+    setText(
+      notice,
+      `This pair is already listed as pool ${shortHex(pool.toString())}. ` +
+        'The registry admits one pool per pair, so a second one cannot be registered. ' +
+        'Trade or add liquidity there instead.',
+    )
+  } catch {
+    notice.hidden = true
+  }
+}
+
 function selectedFeeTierBps(): bigint {
   const checked = feeTiers.querySelector<HTMLInputElement>('input[name="lpFee"]:checked')
   return checked ? BigInt(checked.value) : DEFAULT_LP_FEE_BPS
@@ -325,6 +379,12 @@ async function run(): Promise<void> {
       const admin = await walletAccountId()
       if (!admin) throw new Error('Login first.')
       const params = await readParams()
+    const taken = await registryPoolForPair(params.token0, params.token1)
+    if (taken) {
+      throw new Error(
+        `This pair is already listed as pool ${shortHex(taken.toString())}; the registry admits one pool per pair.`,
+      )
+    }
       await (await getClient()).syncChain()
 
       // Resolve token metadata before anything on-chain happens; a bad faucet

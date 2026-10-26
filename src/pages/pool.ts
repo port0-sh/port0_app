@@ -32,7 +32,9 @@ import {
   formatRate,
   isHexId,
   normalizeHex,
+  MAX_SLIPPAGE_BPS,
   parseAmount,
+  parseSlippageBps,
   poolPageTitle,
   shortAddress,
   shortHex,
@@ -115,6 +117,7 @@ const poolBootTitle = qs<HTMLElement>(document, '#pool-boot-title')
 const poolBootDetail = qs<HTMLElement>(document, '#pool-boot-detail')
 const priceNow = qs<HTMLElement>(document, '#price-now')
 const priceNowValue = qs<HTMLElement>(document, '#price-now-value')
+const priceNowReverse = qs<HTMLElement>(document, '#price-now-reverse')
 const priceNowUnit = qs<HTMLElement>(document, '#price-now-unit')
 
 const historyPanel = qs<HTMLElement>(document, '#history-panel')
@@ -349,8 +352,9 @@ function renderSummary(): void {
     `Effective fee ${split.effective}\n` +
     `Protocol cut ${split.share} of it, ${split.protocol}\n` +
     `LPs keep ${split.lpKeeps}`
-  const price = priceToken0InToken1(state)
-  renderPriceNow(price)
+  const reserves = { reserve0: state.reserve0.toString(), reserve1: state.reserve1.toString() }
+  const price = spotPrice(reserves)
+  renderPriceNow(reserves)
   renderReserves()
   // The tab names the pool, not the site, once the pool's own price is known.
   // Until then the page keeps the static title.
@@ -362,14 +366,41 @@ function renderSummary(): void {
   )
 }
 
-/** Renders the headline price. `null` means the pool holds no liquidity. */
-function renderPriceNow(price: string | null): void {
+/** The ratio of the two reserves, in token0 priced in token1. */
+function spotPrice(state: { reserve0: string; reserve1: string }): string | null {
+  if (!record) return null
+  const scaled = priceScaled(state, record.token0Decimals, record.token1Decimals)
+  return scaled === null ? null : formatScaled(scaled)
+}
+
+/**
+ * Renders the headline price in both directions.
+ *
+ * The ratio, not the output of a one-token swap: on a thin pool those differ by
+ * the price impact of a whole token, and the ratio is the number the indexer and
+ * every quote start from.
+ */
+function renderPriceNow(state: { reserve0: string; reserve1: string } | null): void {
   if (!record) return
-  priceNowValue.textContent = price ?? '—'
+  const forward = state ? spotPrice(state) : null
+  const reverse =
+    state && record
+      ? (() => {
+          const scaled = priceScaled(
+            { reserve0: state.reserve1, reserve1: state.reserve0 },
+            record.token1Decimals,
+            record.token0Decimals,
+          )
+          return scaled === null ? null : formatScaled(scaled)
+        })()
+      : null
+  priceNowValue.textContent = forward ?? '—'
   priceNowUnit.textContent =
-    price === null
+    forward === null
       ? 'No liquidity yet'
-      : `1 ${record.token0Symbol} = ${price} ${record.token1Symbol}`
+      : `1 ${record.token0Symbol} = ${forward} ${record.token1Symbol}`
+  priceNowReverse.textContent =
+    reverse === null ? '' : `1 ${record.token1Symbol} = ${reverse} ${record.token0Symbol}`
   priceNow.hidden = false
 }
 
@@ -380,12 +411,7 @@ function renderPriceNow(price: string | null): void {
  */
 function renderIndexedPrice(): void {
   if (currentState !== null || !record || !indexedPool) return
-  const scaled = priceScaled(
-    { reserve0: indexedPool.reserve0, reserve1: indexedPool.reserve1 },
-    record.token0Decimals,
-    record.token1Decimals,
-  )
-  renderPriceNow(scaled === null ? null : formatScaled(scaled))
+  renderPriceNow({ reserve0: indexedPool.reserve0, reserve1: indexedPool.reserve1 })
 }
 
 /**
@@ -718,42 +744,9 @@ function renderHistoryTable(samples: IndexerSnapshot[]): void {
   }
 }
 
-/**
- * Price of 1 token0 in token1, computed with the contract's own formula at
- * zero fees: amountOut(10^d0, r0, r1, 0, 0). Returns null on an empty pool.
- *
- * The contract formula floors to zero when the price is below one base unit, so
- * the scaled ratio is the fallback; without it a deep pool's headline would
- * throw and take the whole chain read with it.
- */
-function priceToken0InToken1(state: PoolState): string | null {
-  if (!record || state.reserve0 === 0n || state.reserve1 === 0n) return null
-  try {
-    const raw = currentQuoteModule()?.amountOut(
-      10n ** BigInt(record.token0Decimals),
-      state.reserve0,
-      state.reserve1,
-      0n,
-      0n,
-    )
-    if (raw) return trimFraction(formatAmount(raw.amountOut, record.token1Decimals))
-  } catch {
-    // Below one base unit; the scaled ratio keeps it visible.
-  }
-  const scaled = priceScaled(
-    { reserve0: state.reserve0.toString(), reserve1: state.reserve1.toString() },
-    record.token0Decimals,
-    record.token1Decimals,
-  )
-  return scaled === null ? null : formatScaled(scaled)
-}
 
 /** The port0 module, if already loaded. Null when quotes have never run. */
 let loadedXykModule: XykModule | null = null
-
-function currentQuoteModule(): XykModule | null {
-  return loadedXykModule
-}
 
 function trimFraction(value: string, maxFractionDigits = 6): string {
   const [intPart, frac = ''] = value.split('.')
@@ -1044,11 +1037,13 @@ async function recomputeQuotes(): Promise<void> {
 }
 
 function slippageInput(input: HTMLInputElement): bigint {
-  const value = Number(input.value)
-  if (!Number.isInteger(value) || value < 0 || value > 9999) {
-    throw new RangeError('Slippage must be an integer in [0, 9999] bps.')
-  }
-  return BigInt(value)
+  return parseSlippageBps(input.value)
+}
+
+// The fields carry the same ceiling the parser enforces, so the browser refuses
+// the value before it reaches the quote.
+for (const input of [swapSlippage, addSlippage, removeSlippage]) {
+  input.max = String(MAX_SLIPPAGE_BPS)
 }
 
 function renderSwapQuote(): void {
@@ -1107,6 +1102,15 @@ function renderSwapQuote(): void {
     ]
     if (impactBps > 500n) {
       lines.push(el('p', { class: 'error' }, 'Price impact above 5%.'))
+    }
+    if (slippageBps > 100n) {
+      lines.push(
+        el(
+          'p',
+          { class: 'error' },
+          `Slippage ${formatBps(slippageBps)}: the pool may fill you up to that far from the quote.`,
+        ),
+      )
     }
     swapQuote.append(...lines)
   } catch (error) {
@@ -1180,6 +1184,18 @@ function renderAddQuote(): void {
         ),
       )
     }
+    lines.push(
+      el(
+        'p',
+        { class: 'muted' },
+        'Depositing is not holding: if the price moves, the pool rebalances towards the new ratio you can withdraw, ' +
+          'so the two amounts you take out may be worth less than the two you put in. Fees earned are what offset that.',
+      ),
+    )
+    // The share of the pool this deposit buys, so a creator sees what they own.
+    const totalAfter = state.lpSupply + quote.liquidityToUser
+    const shareBps = totalAfter > 0n ? (quote.liquidityToUser * 10000n) / totalAfter : 0n
+    lines.push(el('p', { class: 'muted' }, `Your share of the pool after this deposit: ${formatBps(shareBps)}`))
     if (quote.refund0 > 0n) {
       lines.push(el('p', {}, `Refund: ${formatAmount(quote.refund0, record.token0Decimals)} ${record.token0Symbol}`))
     }

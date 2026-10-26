@@ -108,6 +108,18 @@
           <label><input type="radio" name="lpFee" value="30" checked /> 0.30%</label>
           <label><input type="radio" name="lpFee" value="100" /> 1.00%</label>
         </div>
+        <p class="hint muted">
+          0.05% for two dollars: two stablecoins, or two versions of one asset.
+          0.30% for a volatile pair: a token against a dollar, or two volatile
+          tokens. 1.00% for an illiquid token that trades rarely.
+        </p>
+        <p class="hint">
+          The fee is fixed for this pair once the pool is registered: the registry
+          admits one pool per pair, so a different fee needs a different pair. The
+          pool also holds no liquidity until you deposit, and it is registered
+          before that.
+        </p>
+        <p class="hint error" id="param-pair-taken" hidden></p>
 
         <span id="param-fee-breakdown" class="muted hint"></span>
       </form>
