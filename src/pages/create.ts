@@ -21,7 +21,7 @@ import { chainNetworkId } from '../lib/network'
 import { qs, setText } from '../lib/dom'
 import { DEFAULT_LP_FEE_BPS, POOL_DEPLOY_FEE_BASE_UNITS } from '../lib/fees'
 import type { RegistryFeePolicy } from '@port0.sh/sdk'
-import { formatBps, isHexId, shortHex, withHexPrefix } from '../lib/format'
+import { feeSplit, formatAmount, formatBps, isHexId, shortHex, withHexPrefix } from '../lib/format'
 
 import { mountSite } from '../lib/site'
 import { toast } from '../ui/toast'
@@ -77,6 +77,7 @@ token0Select.addEventListener('change', () => void reportPairTaken())
 token1Select.addEventListener('change', () => void reportPairTaken())
 const feeTiers = qs<HTMLDivElement>(document, '#fee-tiers')
 const feeBreakdown = qs<HTMLSpanElement>(document, '#param-fee-breakdown')
+const launchCost = qs<HTMLParagraphElement>(document, '#launch-cost')
 
 const stepAccount = qs<HTMLLIElement>(document, '#step-account')
 const stepDeploy = qs<HTMLLIElement>(document, '#step-deploy')
@@ -219,6 +220,36 @@ async function loadRegistryPolicy(): Promise<RegistryFeePolicy> {
   return registryPolicy
 }
 
+/** The chain's fee asset, so base units can be shown as an amount with a symbol. */
+let feeAssetMeta: { decimals: number; symbol: string } | null = null
+
+async function feeAsset(): Promise<{ decimals: number; symbol: string }> {
+  if (feeAssetMeta !== null) return feeAssetMeta
+  const { BasicFungibleFaucetComponent } = await sdkModule()
+  const account = await getPublicAccount(CONFIG.chainFeeFaucetId)
+  const meta = BasicFungibleFaucetComponent.fromAccount(account)
+  feeAssetMeta = { decimals: meta.decimals(), symbol: meta.symbol().toString() }
+  return feeAssetMeta
+}
+
+/**
+ * States what creating a pool costs before the button is pressed: the registry's
+ * own register price, plus the balance the pool needs to pay its first fee.
+ */
+async function renderLaunchCost(): Promise<void> {
+  try {
+    const [registerFee, asset] = await Promise.all([loadRegisterFee(), feeAsset()])
+    setText(
+      launchCost,
+      `Creating this pool costs ${formatAmount(registerFee, asset.decimals)} ${asset.symbol} in ` +
+        `registry fees, plus ${formatAmount(BigInt(POOL_FUNDING_AMOUNT), asset.decimals)} ${asset.symbol} ` +
+        'sent to the pool to pay its first transaction. Both come out of your wallet.',
+    )
+  } catch (error) {
+    console.warn('launch cost unavailable', error)
+  }
+}
+
 /** The registry's live register price, in the fee asset's base units. */
 async function loadRegisterFee(): Promise<bigint> {
   if (registryRegisterFee === null) await loadRegistryPolicy()
@@ -346,7 +377,24 @@ function showDeployError(message: string): void {
 }
 
 function renderFeeBreakdown(): void {
-  setText(feeBreakdown, `LP fee tier: ${formatBps(selectedFeeTierBps())}`)
+  const tier = selectedFeeTierBps()
+  // The protocol's cut is inside the tier, not on top of it: the swapper pays the
+  // tier, and the registry takes its share of that.
+  const share = registryPolicy?.protocolFeeShareBps
+  if (share === undefined) {
+    setText(feeBreakdown, `LP fee tier: ${formatBps(tier)}`)
+  } else {
+    const split = feeSplit(tier, share)
+    setText(
+      feeBreakdown,
+      `The swapper pays ${split.effective}: ${split.lpKeeps} to LPs, ${split.protocol} to the protocol.`,
+    )
+  }
+  void renderLaunchCost()
+  // The first paint runs before the registry policy is read; redraw once it is.
+  if (!registryPolicy) {
+    void loadRegistryPolicy().then(() => renderFeeBreakdown()).catch(() => undefined)
+  }
 }
 
 /**

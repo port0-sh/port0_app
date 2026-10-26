@@ -108,20 +108,13 @@
           <label><input type="radio" name="lpFee" value="30" checked /> 0.30%</label>
           <label><input type="radio" name="lpFee" value="100" /> 1.00%</label>
         </div>
-        <p class="hint muted">
-          0.05% for two dollars: two stablecoins, or two versions of one asset.
-          0.30% for a volatile pair: a token against a dollar, or two volatile
-          tokens. 1.00% for an illiquid token that trades rarely.
-        </p>
+        <span id="param-fee-breakdown" class="muted hint"></span>
+        <p class="hint muted">Recommended settings: 0.05% for stable pairs, 0.30% for volatile ones, 1.00% for illiquid tokens.</p>
         <p class="hint">
-          The fee is fixed for this pair once the pool is registered: the registry
-          admits one pool per pair, so a different fee needs a different pair. The
-          pool also holds no liquidity until you deposit, and it is registered
-          before that.
+          The fee is permanent for this pair: the registry lists one pool per pair.
+          The pool stays empty until you deposit.
         </p>
         <p class="hint error" id="param-pair-taken" hidden></p>
-
-        <span id="param-fee-breakdown" class="muted hint"></span>
       </form>
     </section>
 
@@ -143,7 +136,7 @@
         <button class="btn" id="restart-button" hidden>Restart flow</button>
         <div class="muted flow-status" id="deploy-status"></div>
       </div>
-      <p class="muted" style="margin-top: 0.75rem">Network fees are paid from your wallet in USDCX.</p>
+      <p class="muted" id="launch-cost" style="margin-top: 0.75rem">Network fees are paid from your wallet in USDCX.</p>
       <p id="deploy-result" hidden>Pool created: <a id="deploy-result-link" href="/pool.html">open pool page →</a></p>
     </section>
   </main>
