@@ -19,6 +19,7 @@ import {
   isHexId,
   normalizeHex,
   parseAmount,
+  parseSlippagePercent,
   shortAddress,
   shortHex,
 } from '../lib/format'
@@ -823,11 +824,7 @@ function renderRouteTokenLabels(): void {
 
 /** Slippage tolerance in basis points, read from the percent field. */
 function slippageBps(): bigint {
-  const percent = Number(routeSlippage.value)
-  if (!Number.isFinite(percent) || percent < 0 || percent > 50) {
-    throw new RangeError('Slippage must be between 0% and 50%.')
-  }
-  return BigInt(Math.round(percent * 100))
+  return parseSlippagePercent(routeSlippage.value)
 }
 
 /** A decimal string for an input field: no grouping, trailing zeros trimmed. */
@@ -1112,6 +1109,16 @@ function renderRouteQuote(): void {
     detailRow('Price impact', formatBps(best.costBps)),
     detailRow('Route', routePath(best)),
   ]
+  if (slippage > 500n) {
+    lines.push(
+      el(
+        'p',
+        { class: 'error slippage-warning' },
+        `Slippage ${formatBps(slippage)} is high: this swap can fill that far from the quote, ` +
+          'and a trade at that price is worse than waiting.',
+      ),
+    )
+  }
   if (best.hops.length > 1) {
     lines.push(detailRow('Hops', `${best.hops.length} transactions`))
   }

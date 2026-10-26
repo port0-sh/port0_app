@@ -198,20 +198,24 @@ export function feeSplit(
   }
 }
 
-/** The widest slippage the forms accept, in basis points. */
-export const MAX_SLIPPAGE_BPS = 500
+/** The widest slippage a swap can carry, in basis points: 99.99%. */
+export const MAX_SLIPPAGE_BPS = 9999
 
 /**
- * Parses a slippage field. The ceiling is a guard, not a default: a bound wide
- * enough to accept a 99% fill is a bad trade the user cannot see.
+ * Parses a slippage field entered as a percentage.
+ *
+ * The forms ask for percent because that is what people think in; the protocol
+ * takes basis points. `0.5` is 50 bps. There is no ceiling below the protocol's
+ * own: a user who wants a 20% bound gets a warning, not a refusal.
  */
-export function parseSlippageBps(value: string, max: number = MAX_SLIPPAGE_BPS): bigint {
-  if (value.trim() === '') {
-    throw new RangeError(`Slippage must be a whole number of basis points in [0, ${max}].`)
+export function parseSlippagePercent(value: string): bigint {
+  const text = value.trim().replace(/%$/, '').trim()
+  if (text === '' || !/^\d+(\.\d+)?$/.test(text)) {
+    throw new RangeError('Enter a slippage percentage, for example 0.5.')
   }
-  const parsed = Number(value)
-  if (!Number.isInteger(parsed) || parsed < 0 || parsed > max) {
-    throw new RangeError(`Slippage must be a whole number of basis points in [0, ${max}].`)
+  const bps = Math.round(Number(text) * 100)
+  if (!Number.isFinite(bps) || bps < 0 || bps > MAX_SLIPPAGE_BPS) {
+    throw new RangeError('Slippage must be between 0% and 99.99%.')
   }
-  return BigInt(parsed)
+  return BigInt(bps)
 }

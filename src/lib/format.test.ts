@@ -10,7 +10,7 @@ import {
   explorerAccountUrl,
   feeSplit,
   parseAmount,
-  parseSlippageBps,
+  parseSlippagePercent,
   shortAddress,
   shortHex,
   poolPageTitle,
@@ -35,23 +35,25 @@ describe('normalizeHex', () => {
   })
 })
 
-describe('parseSlippageBps', () => {
-  it('accepts a bound the form allows', () => {
-    expect(parseSlippageBps('50')).toBe(50n)
-    expect(parseSlippageBps('0')).toBe(0n)
-    expect(parseSlippageBps('500')).toBe(500n)
+describe('parseSlippagePercent', () => {
+  it('reads the percentage the form asks for', () => {
+    expect(parseSlippagePercent('0.5')).toBe(50n)
+    expect(parseSlippagePercent('5')).toBe(500n)
+    expect(parseSlippagePercent('0')).toBe(0n)
+    expect(parseSlippagePercent('0.05')).toBe(5n)
+    expect(parseSlippagePercent(' 1.5 % ')).toBe(150n)
   })
 
-  it('refuses a bound wide enough to be a bad fill', () => {
-    // 9,999 bps was accepted before: a 99.99% fill is not a slippage setting.
-    expect(() => parseSlippageBps('9999')).toThrow(RangeError)
-    expect(() => parseSlippageBps('501')).toThrow(RangeError)
+  it('accepts every bound the protocol allows, and no more', () => {
+    // 99.99% is the widest bound basis points can express.
+    expect(parseSlippagePercent('99.99')).toBe(9999n)
+    expect(() => parseSlippagePercent('100')).toThrow(RangeError)
   })
 
-  it('refuses a value that is not a whole non-negative number', () => {
-    expect(() => parseSlippageBps('-1')).toThrow(RangeError)
-    expect(() => parseSlippageBps('1.5')).toThrow(RangeError)
-    expect(() => parseSlippageBps('')).toThrow(RangeError)
+  it('refuses what is not a non-negative number', () => {
+    expect(() => parseSlippagePercent('-1')).toThrow(RangeError)
+    expect(() => parseSlippagePercent('')).toThrow(RangeError)
+    expect(() => parseSlippagePercent('half')).toThrow(RangeError)
   })
 })
 

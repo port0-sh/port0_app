@@ -314,7 +314,7 @@ async function readParams(): Promise<PoolParams> {
   const policy = await loadRegistryPolicy()
   if (!policy.allowedLpFeeBps.some((tier: bigint) => tier === lpFeeBps)) {
     throw new Error(
-      `The registry does not list ${lpFeeBps.toString()} bps as an LP fee tier.`,
+      `The registry does not list ${formatBps(lpFeeBps)} as an LP fee tier.`,
     )
   }
   return {

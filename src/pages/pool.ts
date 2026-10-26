@@ -32,9 +32,8 @@ import {
   formatRate,
   isHexId,
   normalizeHex,
-  MAX_SLIPPAGE_BPS,
   parseAmount,
-  parseSlippageBps,
+  parseSlippagePercent,
   poolPageTitle,
   shortAddress,
   shortHex,
@@ -1037,13 +1036,7 @@ async function recomputeQuotes(): Promise<void> {
 }
 
 function slippageInput(input: HTMLInputElement): bigint {
-  return parseSlippageBps(input.value)
-}
-
-// The fields carry the same ceiling the parser enforces, so the browser refuses
-// the value before it reaches the quote.
-for (const input of [swapSlippage, addSlippage, removeSlippage]) {
-  input.max = String(MAX_SLIPPAGE_BPS)
+  return parseSlippagePercent(input.value)
 }
 
 function renderSwapQuote(): void {
@@ -1097,18 +1090,19 @@ function renderSwapQuote(): void {
         {},
         `You receive: ${formatAmount(quote.amountOut, decimalsOut)} ${symbolOut}`,
       ),
-      el('p', {}, `Minimum out (slippage ${slippageBps} bps): ${formatAmount(minOut, decimalsOut)} ${symbolOut}`),
+      el('p', {}, `Minimum out (slippage ${formatBps(slippageBps)}): ${formatAmount(minOut, decimalsOut)} ${symbolOut}`),
       el('p', { class: 'muted' }, `Price impact: ${impact}`),
     ]
     if (impactBps > 500n) {
       lines.push(el('p', { class: 'error' }, 'Price impact above 5%.'))
     }
-    if (slippageBps > 100n) {
+    if (slippageBps > 500n) {
       lines.push(
         el(
           'p',
-          { class: 'error' },
-          `Slippage ${formatBps(slippageBps)}: the pool may fill you up to that far from the quote.`,
+          { class: 'error slippage-warning' },
+          `Slippage ${formatBps(slippageBps)} is high: this swap can fill that far from the quote, ` +
+            'and a trade at that price is worse than waiting.',
         ),
       )
     }
@@ -1172,9 +1166,31 @@ function renderAddQuote(): void {
       el(
         'p',
         {},
-        `Minimum ${lpSymbol()} (slippage ${slippageBps} bps): ${minLp.toString()}`,
+        `Minimum ${lpSymbol()} (slippage ${formatBps(slippageBps)}): ${minLp.toString()}`,
       ),
     ]
+    const held0 = balanceOf(record.token0FaucetId)
+    const held1 = balanceOf(record.token1FaucetId)
+    if (amount0 > held0) {
+      lines.push(
+        el(
+          'p',
+          { class: 'error' },
+          `You hold ${formatAmount(held0, record.token0Decimals)} ${record.token0Symbol}, ` +
+            `and this deposit spends ${formatAmount(amount0, record.token0Decimals)}.`,
+        ),
+      )
+    }
+    if (amount1 > held1) {
+      lines.push(
+        el(
+          'p',
+          { class: 'error' },
+          `You hold ${formatAmount(held1, record.token1Decimals)} ${record.token1Symbol}, ` +
+            `and this deposit spends ${formatAmount(amount1, record.token1Decimals)}.`,
+        ),
+      )
+    }
     if (state.lpSupply === 0n) {
       lines.push(
         el(
@@ -1184,18 +1200,19 @@ function renderAddQuote(): void {
         ),
       )
     }
+
+    // The share of the pool this deposit buys, so a creator sees what they own.
+    const totalAfter = state.lpSupply + quote.liquidityToUser
+    const shareBps = totalAfter > 0n ? (quote.liquidityToUser * 10000n) / totalAfter : 0n
+    lines.push(el('p', {}, `Your share of the pool after this deposit: ${formatBps(shareBps)}`))
     lines.push(
       el(
         'p',
         { class: 'muted' },
-        'Depositing is not holding: if the price moves, the pool rebalances towards the new ratio you can withdraw, ' +
-          'so the two amounts you take out may be worth less than the two you put in. Fees earned are what offset that.',
+        "Providing liquidity carries impermanent loss risk: a position's value can fall below the value of " +
+          'holding the same tokens, and fees are not guaranteed to offset it.',
       ),
     )
-    // The share of the pool this deposit buys, so a creator sees what they own.
-    const totalAfter = state.lpSupply + quote.liquidityToUser
-    const shareBps = totalAfter > 0n ? (quote.liquidityToUser * 10000n) / totalAfter : 0n
-    lines.push(el('p', { class: 'muted' }, `Your share of the pool after this deposit: ${formatBps(shareBps)}`))
     if (quote.refund0 > 0n) {
       lines.push(el('p', {}, `Refund: ${formatAmount(quote.refund0, record.token0Decimals)} ${record.token0Symbol}`))
     }
@@ -1244,7 +1261,7 @@ function renderRemoveQuote(): void {
       el(
         'p',
         {},
-        `Minimum out (slippage ${slippageBps} bps): ${formatAmount(min0, record.token0Decimals)} ${record.token0Symbol} / `,
+        `Minimum out (slippage ${formatBps(slippageBps)}): ${formatAmount(min0, record.token0Decimals)} ${record.token0Symbol} / `,
         `${formatAmount(min1, record.token1Decimals)} ${record.token1Symbol}`,
       ),
     )
