@@ -893,16 +893,8 @@ dialog.modal::backdrop {
 }
 
 .price-now-unit {
-  color: var(--light-grey);
+  color: var(--white);
   font-size: 0.95em;
-}
-
-/* The same price the other way round, for when token0 is not the one people
-   quote in. */
-.price-now-reverse {
-  width: 100%;
-  color: var(--dark-grey);
-  font-size: 0.85em;
 }
 
 .table-wrap {
@@ -1916,4 +1908,16 @@ dialog.alpha-gate li {
     max-width: none;
     text-align: left;
   }
+}
+
+/*
+ * The loss disclosure is a warning box, not a footnote: the sentence is legal
+ * prose, and the border is what makes it read as one.
+ */
+.il-notice {
+  border: 1px solid var(--purple);
+  padding: 0.5rem 1ch;
+  margin: 0.5rem 0 0;
+  color: var(--light-grey);
+  font-size: 0.95em;
 }

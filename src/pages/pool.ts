@@ -397,9 +397,9 @@ function renderPriceNow(state: { reserve0: string; reserve1: string } | null): v
   priceNowUnit.textContent =
     forward === null
       ? 'No liquidity yet'
-      : `1 ${record.token0Symbol} = ${forward} ${record.token1Symbol}`
-  priceNowReverse.textContent =
-    reverse === null ? '' : `1 ${record.token1Symbol} = ${reverse} ${record.token0Symbol}`
+      : `1 ${record.token0Symbol} = ${forward} ${record.token1Symbol}` +
+        (reverse === null ? '' : `  ·  1 ${record.token1Symbol} = ${reverse} ${record.token0Symbol}`)
+  priceNowReverse.textContent = ''
   priceNow.hidden = false
 }
 
@@ -1024,7 +1024,8 @@ async function refreshBalances(): Promise<void> {
   renderBalanceLines()
 }
 
-function quoteError(message: string): Node {
+function quoteError(message: string, form: keyof typeof formErrors = 'swap'): Node {
+  formErrors[form] = true
   return el('p', { class: 'error' }, message)
 }
 
@@ -1041,6 +1042,7 @@ function slippageInput(input: HTMLInputElement): bigint {
 
 function renderSwapQuote(): void {
   clear(swapQuote)
+  formErrors.swap = false
   if (!currentState || !record || !loadedXykModule) return
   if (!swapSide.value) {
     swapQuote.append(el('p', { class: 'muted' }, 'Pick a token to see the quote.'))
@@ -1119,6 +1121,8 @@ function renderSwapQuote(): void {
     } else {
       swapQuote.append(quoteError(message))
     }
+  } finally {
+    renderWalletGating()
   }
 }
 
@@ -1142,6 +1146,7 @@ function minInputForOneOut(
 
 function renderAddQuote(): void {
   clear(addQuote)
+  formErrors.add = false
   if (!currentState || !record || !loadedXykModule) return
   const { quoteMint, applySlippage } = loadedXykModule
   const state = currentState
@@ -1161,6 +1166,8 @@ function renderAddQuote(): void {
     const quote = quoteMint(amount0, amount1, state.reserve0, state.reserve1, state.lpSupply)
     const minLp = applySlippage(quote.liquidityToUser, slippageBps)
 
+    // Figures first, then what the deposit costs you: the errors and the loss
+    // disclosure come after the refunds, where a reader finishes.
     const lines: Node[] = [
       el('p', {}, `${lpSymbol()} you receive: ${quote.liquidityToUser.toString()}`),
       el(
@@ -1169,9 +1176,32 @@ function renderAddQuote(): void {
         `Minimum ${lpSymbol()} (slippage ${formatBps(slippageBps)}): ${minLp.toString()}`,
       ),
     ]
+
+    // The share of the pool this deposit buys, so a creator sees what they own.
+    const totalAfter = state.lpSupply + quote.liquidityToUser
+    const shareBps = totalAfter > 0n ? (quote.liquidityToUser * 10000n) / totalAfter : 0n
+    lines.push(el('p', {}, `Your share of the pool after this deposit: ${formatBps(shareBps)}`))
+
+    if (state.lpSupply === 0n) {
+      lines.push(
+        el(
+          'p',
+          { class: 'muted' },
+          'This is the first deposit, so it sets the pool price. A very imbalanced deposit makes small swaps round to zero.',
+        ),
+      )
+    }
+    if (quote.refund0 > 0n) {
+      lines.push(el('p', {}, `Refund: ${formatAmount(quote.refund0, record.token0Decimals)} ${record.token0Symbol}`))
+    }
+    if (quote.refund1 > 0n) {
+      lines.push(el('p', {}, `Refund: ${formatAmount(quote.refund1, record.token1Decimals)} ${record.token1Symbol}`))
+    }
+
     const held0 = balanceOf(record.token0FaucetId)
     const held1 = balanceOf(record.token1FaucetId)
     if (amount0 > held0) {
+      formErrors.add = true
       lines.push(
         el(
           'p',
@@ -1182,6 +1212,7 @@ function renderAddQuote(): void {
       )
     }
     if (amount1 > held1) {
+      formErrors.add = true
       lines.push(
         el(
           'p',
@@ -1191,42 +1222,26 @@ function renderAddQuote(): void {
         ),
       )
     }
-    if (state.lpSupply === 0n) {
-      lines.push(
-        el(
-          'p',
-          { class: 'muted' },
-          'This is the first deposit, so it sets the pool price. A very imbalanced deposit makes small swaps round to zero.',
-        ),
-      )
-    }
 
-    // The share of the pool this deposit buys, so a creator sees what they own.
-    const totalAfter = state.lpSupply + quote.liquidityToUser
-    const shareBps = totalAfter > 0n ? (quote.liquidityToUser * 10000n) / totalAfter : 0n
-    lines.push(el('p', {}, `Your share of the pool after this deposit: ${formatBps(shareBps)}`))
     lines.push(
       el(
         'p',
-        { class: 'muted' },
+        { class: 'il-notice' },
         "Providing liquidity carries impermanent loss risk: a position's value can fall below the value of " +
           'holding the same tokens, and fees are not guaranteed to offset it.',
       ),
     )
-    if (quote.refund0 > 0n) {
-      lines.push(el('p', {}, `Refund: ${formatAmount(quote.refund0, record.token0Decimals)} ${record.token0Symbol}`))
-    }
-    if (quote.refund1 > 0n) {
-      lines.push(el('p', {}, `Refund: ${formatAmount(quote.refund1, record.token1Decimals)} ${record.token1Symbol}`))
-    }
     addQuote.append(...lines)
   } catch (error) {
-    addQuote.append(quoteError(error instanceof Error ? error.message : String(error)))
+    addQuote.append(quoteError(error instanceof Error ? error.message : String(error), 'add'))
+  } finally {
+    renderWalletGating()
   }
 }
 
 function renderRemoveQuote(): void {
   clear(removeQuote)
+  formErrors.remove = false
   if (!currentState || !record || !loadedXykModule) return
   const { quoteBurn, applySlippage } = loadedXykModule
   const state = currentState
@@ -1266,24 +1281,40 @@ function renderRemoveQuote(): void {
       ),
     )
   } catch (error) {
-    removeQuote.append(quoteError(error instanceof Error ? error.message : String(error)))
+    removeQuote.append(quoteError(error instanceof Error ? error.message : String(error), 'remove'))
+  } finally {
+    renderWalletGating()
   }
 }
 
 /* Wallet gating and submission. */
+
+/**
+ * Which forms currently hold an error. A form that cannot execute is disabled,
+ * so the user reads the reason instead of signing a transaction that reverts.
+ */
+const formErrors = { swap: false, add: false, remove: false }
 
 function renderWalletGating(): void {
   const connected = walletStore.get().connected
   const hasFees = (record?.feeFaucetId ?? '').length > 0
   const enabled = connected && hasFees
 
-  for (const button of [swapSubmit, addSubmit, removeSubmit]) {
-    button.disabled = !enabled
-    button.textContent = enabled
-      ? 'Submit'
-      : connected
+  const buttons: Array<[HTMLButtonElement, keyof typeof formErrors]> = [
+    [swapSubmit, 'swap'],
+    [addSubmit, 'add'],
+    [removeSubmit, 'remove'],
+  ]
+  for (const [button, form] of buttons) {
+    const blocked = !enabled || formErrors[form]
+    button.disabled = blocked
+    button.textContent = !enabled
+      ? connected
         ? 'Trading disabled'
         : 'Connect wallet to act'
+      : formErrors[form]
+        ? 'Fix the amount first'
+        : 'Submit'
   }
 
   // One gate line above the tabs. Shown only when an action is blocked:
