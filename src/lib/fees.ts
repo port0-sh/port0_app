@@ -1,3 +1,5 @@
+import { formatAmount } from './format'
+
 /**
  * Measured 0.17 testnet fee for the deploy consume of a pool, in base units: a
  * P2ID note that the pool consumes as its first transaction.
@@ -5,7 +7,9 @@
  * Measured by `note_fee_benchmark` alongside the other paths. A pool sweeps any
  * leftover into the protocol pot on its next collect, so the funding is exact.
  */
-export const POOL_DEPLOY_FEE_BASE_UNITS = 133n
+// The pool's code grew with the lifecycle procedure; the deploy consume moved
+// one kernel bucket, from 133 to 140 base units at verification base fee 7.
+export const POOL_DEPLOY_FEE_BASE_UNITS = 140n
 
 /**
  * Measured fee for the deploy consume of a network faucet, in base units.
@@ -32,6 +36,23 @@ export const DEFAULT_LP_FEE_BPS = 30n
 
 /** Seconds in the one-day window every fee APR is stated over. */
 export const FEE_APR_WINDOW_SECS = 86_400
+
+/**
+ * The launch cost sentence: the registry's register price, the balance the pool
+ * needs for its first fee, and their total, in the fee asset.
+ */
+export function launchCostLine(
+  registerFee: bigint,
+  networkFee: bigint,
+  decimals: number,
+  symbol: string,
+): string {
+  const amount = (base: bigint): string => `${formatAmount(base, decimals)} ${symbol}`
+  return (
+    `Registry fee: ${amount(registerFee)} + ` +
+    `network fee: ${amount(networkFee)} = ${amount(registerFee + networkFee)}`
+  )
+}
 
 /**
  * Fee APR on a one-day basis.

@@ -64,8 +64,11 @@
 
   <header class="header">
     <a class="brand" href="/">
-      <img class="brand-mark" src="/mark.svg" alt="" />
+      <span class="brand-logo">
+        <img class="brand-mark" src="/mark.svg" alt="" />
+      </span>
       <span class="brand-name">%VITE_BRAND_NAME%</span>
+      <span class="brand-badge" aria-hidden="true">testnet</span>
     </a>
     <nav class="nav">
       <a href="/">Pools</a>
@@ -85,9 +88,20 @@
   <main class="container">
     <p><a href="/">← Pools</a></p>
 
+    <div class="boot" id="pool-boot">
+      <div class="boot-scan" id="pool-boot-scan" data-loader-state="pool"></div>
+      <div class="boot-copy">
+        <p class="muted boot-detail" id="pool-boot-detail">
+          Reading this pool from the indexer and the chain...
+        </p>
+      </div>
+    </div>
+
+    <div id="page-body" hidden>
     <section class="panel" id="pool-summary">
       <h1 id="pool-pair">Pool</h1>
-      <p class="muted mono" id="pool-id">Loading…</p>
+      <p class="muted mono" id="pool-id"></p>
+      <p class="muted mono" id="pool-tokens" hidden></p>
 
       <p class="price-now" id="price-now" hidden>
         <span class="price-now-value" id="price-now-value">—</span>
@@ -95,15 +109,6 @@
         <span class="price-now-reverse" id="price-now-reverse"></span>
       </p>
 
-      <div class="boot" id="pool-boot" hidden>
-        <span class="boot-glyph" id="pool-boot-glyph" aria-hidden="true">⠋</span>
-        <div class="boot-copy">
-          <p class="boot-title" id="pool-boot-title">Loading pool</p>
-          <p class="muted boot-detail" id="pool-boot-detail">
-            Reading this pool from the indexer and the chain.
-          </p>
-        </div>
-      </div>
       <dl class="stats stats-figures" id="pool-stats" hidden>
         <div>
           <dt>Fee</dt>
@@ -129,8 +134,9 @@
 
     <section class="panel" id="history-panel" hidden>
       <div class="panel-head">
-        <h2>Price history</h2>
+        <h2>History</h2>
         <div class="chip-row" id="history-resolution" role="group" aria-label="Time range">
+          <span class="muted history-span" id="history-span" hidden></span>
           <button type="button" class="chip is-active" data-resolution="1m">1m</button>
           <button type="button" class="chip" data-resolution="5m">5m</button>
           <button type="button" class="chip" data-resolution="1h">1h</button>
@@ -144,17 +150,17 @@
         <table class="table" id="history-table" hidden>
           <thead>
             <tr>
-              <th>Time</th>
+              <th>Time (UTC)</th>
               <th>Block</th>
               <th>Price</th>
-              <th id="history-reserve0-head">Token 0</th>
-              <th id="history-reserve1-head">Token 1</th>
-              <th>LP</th>
+              <th>Operation</th>
+              <th>Tx</th>
             </tr>
           </thead>
           <tbody id="history-rows"></tbody>
         </table>
       </div>
+      <p class="muted" id="activity-note" hidden></p>
     </section>
 
     <nav class="tabs">
@@ -212,6 +218,11 @@
           <p class="muted">Enter amounts to see the quote.</p>
         </div>
 
+        <p class="il-notice" id="add-risk" hidden>
+          Providing liquidity carries impermanent loss risk: a position's value can fall below
+          the value of holding the same tokens, and fees are not guaranteed to offset it.
+        </p>
+
         <div class="form-actions">
           <button type="submit" class="btn btn-primary" id="add-submit" disabled>Connect wallet to deposit</button>
           <div class="muted flow-status" id="add-status"></div>
@@ -226,7 +237,7 @@
         <input id="remove-lp" name="lp" type="text" inputmode="decimal" placeholder="0" autocomplete="off" spellcheck="false" required />
 
         <label for="remove-slippage">Max slippage (%)</label>
-        <input id="remove-slippage" name="slippage" type="number" min="0" max="99.99" step="0.1" value="0.5" required />
+        <input id="remove-slippage" name="slippage" type="number" min="0" max="99.99" step="0.1" value="99" required />
 
         <div class="quote-box" id="remove-quote">
           <p class="muted">Enter an LP amount to see the quote.</p>
@@ -238,6 +249,7 @@
         </div>
       </form>
     </section>
+    </div>
   </main>
 
   <footer class="footer">Copyright © <span id="footer-year">2026</span> <span id="footer-brand">%VITE_BRAND_NAME%</span></footer>

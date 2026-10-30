@@ -8,9 +8,10 @@
  */
 
 import { CONFIG } from '../lib/config'
-import { sdkModule } from '../lib/client'
+import { getPublicAccount, sdkModule } from '../lib/client'
 import { clear, el, qs, setText, type Child } from '../lib/dom'
 import { feeAprOneDay } from '../lib/fees'
+import { feeAssetTotals, volumeValuer, type PoolVolume } from '../lib/stats'
 import {
   compactAmount,
   formatAmount,
@@ -25,6 +26,7 @@ import {
 } from '../lib/format'
 import { formatScaled, priceScaled } from '../lib/history'
 import {
+  fetchLegacyPools,
   fetchPools,
   fetchStatus,
   toPoolView,
@@ -44,12 +46,13 @@ import {
   reachableTokens,
   routerPools,
   routeTokens,
-  tokenPrices,
   type Route,
 } from '../lib/router'
+import { listedPools } from '../lib/registry'
 import { mountSite } from '../lib/site'
 import { playArrivalBell, primeSound } from '../lib/sound'
 import { mountTokenCombo, type TokenEntry, type TokenSource } from '../ui/tokenCombo'
+import { adoptLoader, startSpinner } from '../ui/spinner'
 import { toast } from '../ui/toast'
 import { mountWallet } from '../wallet/ui'
 import { requestAssets, syncWallet, walletStore } from '../wallet/wallet'
@@ -64,6 +67,20 @@ const pageNext = qs<HTMLButtonElement>(document, '#page-next')
 const pageStatus = qs<HTMLSpanElement>(document, '#page-status')
 const pageSizeSelect = qs<HTMLSelectElement>(document, '#page-size')
 const poolCount = qs<HTMLElement>(document, '#pool-count')
+const tableLoader = qs<HTMLElement>(document, '#table-loader')
+/** The mounted table loader, while a read is running. */
+let stopLoader: (() => void) | null = null
+const showLegacyInput = qs<HTMLInputElement>(document, '#show-legacy')
+// On by default: the indexer serves the legacy rows, so showing them costs one
+// request. The toggle hides them without unloading their views.
+let showLegacy = localStorage.getItem('port0-app:show-legacy:v1') !== '0'
+showLegacyInput.checked = showLegacy
+showLegacyInput.addEventListener('change', () => {
+  showLegacy = showLegacyInput.checked
+  localStorage.setItem('port0-app:show-legacy:v1', showLegacy ? '1' : '0')
+  if (showLegacy) void loadLegacyPools()
+  renderTable()
+})
 const refreshButton = qs<HTMLButtonElement>(document, '#refresh-states')
 const refreshStatus = qs<HTMLSpanElement>(document, '#refresh-status')
 const routeForm = qs<HTMLFormElement>(document, '#route-form')
@@ -73,6 +90,8 @@ const routeAmount = qs<HTMLInputElement>(document, '#route-amount')
 const routeSlippage = qs<HTMLInputElement>(document, '#route-slippage')
 const routeQuote = qs<HTMLDivElement>(document, '#route-quote')
 const routeSubmit = qs<HTMLButtonElement>(document, '#route-submit')
+const swapPaused = qs<HTMLParagraphElement>(document, '#swap-paused')
+swapPaused.hidden = CONFIG.tradingEnabled
 const routeStatus = qs<HTMLDivElement>(document, '#route-status')
 const routeAmountOut = qs<HTMLInputElement>(document, '#route-amount-out')
 const routeMinOut = qs<HTMLSpanElement>(document, '#route-min-out')
@@ -100,12 +119,28 @@ const routeFlip = qs<HTMLButtonElement>(document, '#route-flip')
 const REFRESH_INTERVAL_MS = 15_000
 
 /** Every indexed pool: the table and the router both read this one set. */
-let allPools: IndexerPool[] = []
+type TablePool = IndexerPool & { legacy?: boolean; seedOnly?: boolean }
+let allPools: TablePool[] = []
+/** The indexer's active registry, replaced on every poll. */
+let activePoolsList: TablePool[] = []
+/** Legacy rows, loaded once; kept across polls so they do not blink. */
+let legacyPools: TablePool[] = []
+let legacyViews = new Map<string, PoolView>()
+let legacyLoaded = false
+let legacyLoading = false
 let views = new Map<string, PoolView>()
 let refreshing = false
 let firstRefreshDone = false
 /** The route the quote panel is showing, or null. */
 let routeBest: Route | null = null
+/** Token metadata read from the faucet accounts, keyed by lowercase faucet id. */
+const verifiedMeta = new Map<string, TokenEntry>()
+/** The route whose pools and tokens were verified on chain. */
+let verifiedRouteKey = ''
+let routeVerified = false
+let verifyingRoute = false
+/** A key that failed verification; not retried until the route changes. */
+let failedRouteKey = ''
 /** A route stopped at a hop, kept so Retry resumes instead of starting over. */
 let pendingRoute: {
   route: Route
@@ -134,7 +169,7 @@ let pageSize = 10
 let pageIndex = 0
 
 /** Table sort. Daily volume descending by default, the busiest pools first. */
-type SortKey = 'pair' | 'price' | 'reserves' | 'volume' | 'fee' | 'apr'
+type SortKey = 'pair' | 'volume' | 'fee' | 'apr'
 let sortKey: SortKey = 'volume'
 let sortDir: 'asc' | 'desc' = 'desc'
 
@@ -147,10 +182,28 @@ try {
 pageSizeSelect.value = String(pageSize)
 
 let routeRunning = false
+/** A hop may still land; the route stays blocked until a reload. */
+let routeHeld = false
 
 refreshButton.addEventListener('click', () => {
   void refresh({ manual: true })
 })
+
+/** The refresh control is the table's one progress indicator. */
+let stopRefreshSpinner: (() => void) | null = null
+function setRefreshBusy(busy: boolean): void {
+  if (busy) {
+    if (stopRefreshSpinner !== null) return
+    refreshButton.disabled = true
+    refreshButton.textContent = ''
+    stopRefreshSpinner = startSpinner(refreshButton)
+  } else {
+    stopRefreshSpinner?.()
+    stopRefreshSpinner = null
+    refreshButton.disabled = false
+    refreshButton.textContent = 'Refresh'
+  }
+}
 
 pagePrev.addEventListener('click', () => {
   if (pageIndex > 0) {
@@ -197,11 +250,22 @@ renderTable()
 async function refresh(options: { manual?: boolean } = {}): Promise<void> {
   if (refreshing) return
   if (CONFIG.indexerUrl.length === 0) {
+    adoptLoader(tableLoader)?.()
     renderTable()
     return
   }
   refreshing = true
-  if (options.manual || !firstRefreshDone) setText(refreshStatus, 'Refreshing…')
+  // The loader fills the table area only when there is no table: the first read,
+  // or a later one with nothing on screen. A refresh with rows leaves them where
+  // they are; the button's spinner says the read is running.
+  const showLoader = allPools.length === 0
+  stopLoader?.()
+  if (showLoader) {
+    clear(tableHost)
+    stopLoader = adoptLoader(tableLoader)
+  } else {
+    stopLoader = null
+  }
   try {
     const collected: IndexerPool[] = []
     let cursor: string | null = null
@@ -217,13 +281,26 @@ async function refresh(options: { manual?: boolean } = {}): Promise<void> {
       // stays out of this page's dependency graph.
       resolved.set(pool.id.toLowerCase(), await toPoolView(pool, false))
     }
-    allPools = collected
+    activePoolsList = collected.map((pool) => ({
+      ...pool,
+      seedOnly: BigInt(pool.lp_supply) <= 1000n,
+    }))
     views = resolved
+    // The poll replaces the active list; legacy rows and their views survive it.
+    for (const [id, view] of legacyViews) views.set(id, view)
+    allPools = [...activePoolsList, ...legacyPools]
+    // The first read has landed: renderTable may draw now. Setting this before
+    // the render, not in `finally`, because the render is what finishes the
+    // loading state.
+    firstRefreshDone = true
     renderRouteTokens()
     renderRouteQuote()
     renderTable()
     indexerStatus = await fetchStatus(CONFIG.indexerUrl)
     renderStats()
+    // Legacy rows load only when the reader turns them on, or on a manual
+    // refresh once they are on.
+    if (showLegacy) void loadLegacyPools(options.manual === true)
     setText(refreshStatus, `updated ${new Date().toLocaleTimeString()}`)
   } catch (error) {
     // A partial list must not look like a complete one.
@@ -235,10 +312,102 @@ async function refresh(options: { manual?: boolean } = {}): Promise<void> {
   } finally {
     refreshing = false
     firstRefreshDone = true
+    stopLoader?.()
+    stopLoader = null
+  }
+}
+
+/**
+ * Appends the legacy registries' pools to the same list as the active ones. They
+ * carry `legacy: true`: the table dims them and tags them, the router and the
+ * stats ignore them.
+ *
+ * The rows come from the indexer, which read the pools once at startup. Reading
+ * the same accounts in the browser imports them, one per pool and faucet, and
+ * each import blocks the main thread; the list is a snapshot either way.
+ */
+async function loadLegacyPools(force = false): Promise<void> {
+  if (CONFIG.legacyRegistryIds.length === 0 || legacyLoading) return
+  if (legacyLoaded && !force) return
+  legacyLoading = true
+  setRefreshBusy(true)
+  try {
+    const wanted = new Set(CONFIG.legacyRegistryIds.map(normalizeHex))
+    const loaded = await fetchLegacyPools(CONFIG.indexerUrl)
+    const extra: TablePool[] = []
+    const extraViews = new Map<string, PoolView>()
+    for (const pool of loaded) {
+      if (!wanted.has(normalizeHex(pool.registry_id))) continue
+      if (activePoolsList.some((active) => active.id.toLowerCase() === pool.id.toLowerCase())) {
+        continue
+      }
+      extra.push({
+        id: pool.id,
+        token0: pool.token0,
+        token1: pool.token1,
+        token0_symbol: pool.token0_symbol,
+        token0_decimals: pool.token0_decimals,
+        token1_symbol: pool.token1_symbol,
+        token1_decimals: pool.token1_decimals,
+        fee_asset_id: CONFIG.chainFeeFaucetId,
+        reserve0: pool.reserve0,
+        reserve1: pool.reserve1,
+        lp_supply: pool.lp_supply,
+        k: (BigInt(pool.reserve0) * BigInt(pool.reserve1)).toString(),
+        spot_price: 0,
+        pot0: '0',
+        pot1: '0',
+        lp_fee_bps: pool.lp_fee_bps,
+        protocol_fee_share_bps: pool.protocol_fee_share_bps,
+        block: 0,
+        first_seen_unix: 0,
+        last_change_unix: 0,
+        volume_24h_0: '0',
+        volume_24h_1: '0',
+        lp_fees_24h_0: '0',
+        lp_fees_24h_1: '0',
+        protocol_fees_24h_0: '0',
+        protocol_fees_24h_1: '0',
+        swaps_24h: 0,
+        adds_24h: 0,
+        removes_24h: 0,
+        collects_24h: 0,
+        fee_apr: 0,
+        fee_apr_window_secs: 0,
+        legacy: true,
+        seedOnly: BigInt(pool.lp_supply) <= 1000n,
+      })
+      extraViews.set(pool.id.toLowerCase(), {
+        poolId: pool.id,
+        token0FaucetId: normalizeHex(pool.token0),
+        token1FaucetId: normalizeHex(pool.token1),
+        token0Symbol: pool.token0_symbol,
+        token1Symbol: pool.token1_symbol,
+        token0Decimals: pool.token0_decimals,
+        token1Decimals: pool.token1_decimals,
+        feeFaucetId: CONFIG.chainFeeFaucetId,
+        noteFees: {},
+      })
+    }
+    legacyPools = extra
+    legacyViews = extraViews
+    legacyLoaded = true
+    allPools = [...activePoolsList, ...legacyPools]
+    for (const [id, view] of legacyViews) views.set(id, view)
+    renderTable()
+    renderStats()
+  } catch (error) {
+    console.error('[legacy] pool load failed', error)
+  } finally {
+    legacyLoading = false
+    setRefreshBusy(false)
   }
 }
 
 function renderTable(): void {
+  // Before the first read completes there is no pool set to render: the loader
+  // host carries that state, and an empty table would read as "no pools".
+  if (!firstRefreshDone) return
   clear(tableHost)
 
   if (CONFIG.indexerUrl.length === 0) {
@@ -256,6 +425,7 @@ function renderTable(): void {
     return
   }
 
+  const volumeOf = volumeValuer(CONFIG.trustedTokens, usdcxDecimals())
   const filtered = filterPools(allPools)
   setText(poolCount, `${filtered.length} pool${filtered.length === 1 ? '' : 's'}`)
   if (filtered.length === 0) {
@@ -266,15 +436,21 @@ function renderTable(): void {
     return
   }
 
-  // Pinned pools first, in the order the deployment lists them, then whatever
-  // sort the reader chose.
+  // Legacy pools always sit below the supported ones, whatever the sort. Above
+  // them, the pinned pools keep the order the deployment lists them, then
+  // whatever sort the reader chose.
+  const volumes = new Map(
+    allPools.map((pool) => [pool.id.toLowerCase(), volumeOf(pool)] as const),
+  )
   const pinned = (id: string): number => {
     const at = CONFIG.pinnedPools.indexOf(id.toLowerCase())
     return at === -1 ? Number.MAX_SAFE_INTEGER : at
   }
   const sorted = [...filtered].sort((left, right) => {
+    const byLegacy = Number(left.legacy === true) - Number(right.legacy === true)
+    if (byLegacy !== 0) return byLegacy
     const byPin = pinned(left.id) - pinned(right.id)
-    return byPin !== 0 ? byPin : comparePools(left, right)
+    return byPin !== 0 ? byPin : comparePools(left, right, volumes)
   })
   const pages = Math.max(1, Math.ceil(sorted.length / pageSize))
   if (pageIndex >= pages) pageIndex = pages - 1
@@ -291,15 +467,15 @@ function renderTable(): void {
         'tr',
         {},
         sortHeader('Pool', 'pair'),
-        sortHeader('Price', 'price', 'num'),
-        sortHeader('Reserves', 'reserves', 'num'),
+        el('th', { class: 'num' }, 'Price'),
+        el('th', { class: 'num' }, 'Reserves'),
         sortHeader('Volume 24h', 'volume', 'num hide-sm'),
         sortHeader('Fee', 'fee', 'num'),
         sortHeader('Fee APR', 'apr', 'num'),
         el('th', { class: 'open-col' }, ''),
       ),
     ),
-    el('tbody', {}, ...slice.map(poolRow)),
+    el('tbody', {}, ...slice.map((pool) => poolRow(pool, volumes))),
   )
   tableHost.append(table)
 
@@ -348,10 +524,11 @@ function sortHeader(label: string, key: SortKey, className = ''): HTMLTableCellE
 }
 
 /** Pools matching the filter by symbol, pair, or faucet id. */
-function filterPools(list: IndexerPool[]): IndexerPool[] {
+function filterPools(list: TablePool[]): TablePool[] {
+  const visible = showLegacy ? list : list.filter((pool) => !pool.legacy)
   const query = filterInput.value.trim().toLowerCase().replace(/^0x/, '')
-  if (!query) return list
-  return list.filter((pool) => {
+  if (!query) return visible
+  return visible.filter((pool) => {
     const view = views.get(pool.id.toLowerCase())
     const symbols = view === undefined ? [] : [view.token0Symbol, view.token1Symbol]
     const ids = [pool.token0, pool.token1].map((id) => id.toLowerCase().replace(/^0x/, ''))
@@ -365,46 +542,24 @@ function filterPools(list: IndexerPool[]): IndexerPool[] {
   })
 }
 
-/** A human amount: raw base units over the token's decimals. */
-function humanAmount(amount: string, decimals: number): number {
-  return Number(amount) / 10 ** decimals
-}
-
-/** The pair's daily volume valued in token1: the quote side plus the base side. */
-function volumeValue(pool: IndexerPool, view: PoolView | undefined): number {
-  if (view === undefined) return 0
-  const reserve0 = humanAmount(pool.reserve0, view.token0Decimals)
-  const reserve1 = humanAmount(pool.reserve1, view.token1Decimals)
-  const price = reserve0 > 0 ? reserve1 / reserve0 : 0
-  return (
-    humanAmount(pool.volume_24h_1, view.token1Decimals) +
-    humanAmount(pool.volume_24h_0, view.token0Decimals) * price
-  )
-}
-
 /** The value under a sort key. Strings compare as names, numbers as numbers. */
-function sortValue(pool: IndexerPool, key: SortKey): string | number {
+function sortValue(
+  pool: IndexerPool,
+  key: SortKey,
+  volumes: Map<string, PoolVolume>,
+): string | number {
   const view = views.get(pool.id.toLowerCase())
   switch (key) {
     case 'pair':
       return view === undefined
         ? pool.id.toLowerCase()
         : `${view.token0Symbol} / ${view.token1Symbol}`.toLowerCase()
-    case 'price': {
-      if (view === undefined) return -1
-      const scaled = priceScaled(
-        { reserve0: pool.reserve0, reserve1: pool.reserve1 },
-        view.token0Decimals,
-        view.token1Decimals,
-      )
-      return scaled === null ? -1 : Number(scaled)
+    case 'volume': {
+      // Valued in the fee asset at par, the same rule as the protocol totals. A
+      // pool with no counted leg has no comparable volume and sorts last.
+      const volume = volumes.get(pool.id.toLowerCase())
+      return volume === undefined || !volume.counted ? -1 : Number(volume.base)
     }
-    case 'reserves':
-      // Both sides of a pool carry the same value, so the token1 side times two
-      // is the pool's size in one comparable unit.
-      return view === undefined ? 0 : 2 * humanAmount(pool.reserve1, view.token1Decimals)
-    case 'volume':
-      return volumeValue(pool, view)
     case 'fee':
       return Number(pool.lp_fee_bps)
     case 'apr':
@@ -412,9 +567,13 @@ function sortValue(pool: IndexerPool, key: SortKey): string | number {
   }
 }
 
-function comparePools(a: IndexerPool, b: IndexerPool): number {
-  const left = sortValue(a, sortKey)
-  const right = sortValue(b, sortKey)
+function comparePools(
+  a: IndexerPool,
+  b: IndexerPool,
+  volumes: Map<string, PoolVolume>,
+): number {
+  const left = sortValue(a, sortKey, volumes)
+  const right = sortValue(b, sortKey, volumes)
   let order =
     typeof left === 'string' && typeof right === 'string'
       ? left.localeCompare(right)
@@ -423,20 +582,23 @@ function comparePools(a: IndexerPool, b: IndexerPool): number {
   return sortDir === 'asc' ? order : -order
 }
 
-function poolRow(pool: IndexerPool): HTMLTableRowElement {
+function poolRow(pool: TablePool, volumes: Map<string, PoolVolume>): HTMLTableRowElement {
   const id = pool.id.toLowerCase()
   const view = views.get(id)
+  const volume = volumes.get(id)
   const link = `/pool.html?id=${encodeURIComponent(id)}`
   if (view === undefined) {
     return el('tr', {}, el('td', { colspan: 7, class: 'muted' }, shortHex(id)))
   }
-  const price = poolPrice(pool, view)
+  const legacy = pool.legacy === true
+  const seedOnly = pool.seedOnly === true
+  const price = legacy || seedOnly ? null : poolPrice(pool, view)
   const reserve0 = BigInt(pool.reserve0)
   const reserve1 = BigInt(pool.reserve1)
 
   return el(
     'tr',
-    {},
+    legacy ? { class: 'legacy-row' } : {},
     el(
       'td',
       {},
@@ -444,6 +606,19 @@ function poolRow(pool: IndexerPool): HTMLTableRowElement {
       // its own: the link in the last cell is the row's one accessible link.
       el('a', { class: 'row-link', href: link, tabindex: -1, 'aria-hidden': 'true' }),
       el('span', { class: 'pair' }, `${view.token0Symbol} / ${view.token1Symbol}`),
+      legacy
+        ? el(
+            'span',
+            { class: 'badge', title: 'Runs an older contract version. Withdrawals only.' },
+            'Legacy',
+          )
+        : seedOnly
+          ? el(
+              'span',
+              { class: 'badge badge-muted', title: 'No liquidity providers; the ratio is not a market price.' },
+              'No LP',
+            )
+          : null,
       el('span', { class: 'sub mono', title: id }, shortHex(id)),
     ),
     el(
@@ -471,15 +646,27 @@ function poolRow(pool: IndexerPool): HTMLTableRowElement {
     el(
       'td',
       { class: 'num hide-sm' },
-      line(compactAmount(BigInt(pool.volume_24h_0), view.token0Decimals), view.token0Symbol),
-      line(compactAmount(BigInt(pool.volume_24h_1), view.token1Decimals), view.token1Symbol),
+      legacy || volume === undefined || !volume.counted
+        ? el(
+            'span',
+            {
+              class: 'figure',
+              title: 'No stablecoin leg in this pool, so its volume is not valued in USDCX.',
+            },
+            '—',
+          )
+        : line(
+            compactAmount(volume.base, usdcxDecimals()),
+            'USDCX',
+            `${formatAmount(volume.base, usdcxDecimals())} USDCX`,
+          ),
     ),
     el(
       'td',
       { class: 'num' },
       el('span', { class: 'figure' }, formatBps(BigInt(pool.lp_fee_bps))),
     ),
-    feeAprCell(pool),
+    legacy ? el('td', { class: 'num' }, '—') : feeAprCell(pool),
     // The arrow on a table row, a button on a card: the one link per row, so the
     // card itself stays free for selecting an amount or copying the pool id.
     el(
@@ -561,19 +748,6 @@ function placeStats(): void {
   syncStatsHeight()
 }
 
-/** USDCX base units per token base unit, from the live pool graph. */
-function pricesInUsdcx(): Map<string, number> {
-  return tokenPrices(routerPools(allPools), CONFIG.chainFeeFaucetId.toLowerCase())
-}
-
-/** A pool's reserves valued in USDCX base units, or null when a token is unpriced. */
-function poolValueUsdcx(pool: IndexerPool, prices: Map<string, number>): number | null {
-  const price0 = prices.get(pool.token0.toLowerCase())
-  const price1 = prices.get(pool.token1.toLowerCase())
-  if (price0 === undefined || price1 === undefined) return null
-  return Number(pool.reserve0) * price0 + Number(pool.reserve1) * price1
-}
-
 /** USDCX decimals, for the stats figures. */
 function usdcxDecimals(): number {
   return routeTokenMeta(CONFIG.chainFeeFaucetId)?.decimals ?? 6
@@ -581,40 +755,31 @@ function usdcxDecimals(): number {
 
 /** Renders the protocol stats panel from the loaded pool set and the wallet. */
 function renderStats(): void {
-  if (allPools.length === 0) {
+  const activePools = allPools.filter((pool) => !pool.legacy && !pool.seedOnly)
+  if (activePools.length === 0) {
     for (const node of [statTvl, statVolume, statPools, statSwaps, statApr]) {
       setText(node, '—')
     }
-    setText(statFooter, '')
+    setText(statFooter, allPools.length > 0 ? `${allPools.length} unsupported` : '')
     return
   }
-  const prices = pricesInUsdcx()
+  // Totals count only the pools that hold the fee asset; a price derived from
+  // another pool lets one dust pool set a token's worth.
   const decimals = usdcxDecimals()
-  let tvl = 0
-  let volume = 0
-  let unpriced = 0
+  const totals = feeAssetTotals(activePools, CONFIG.trustedTokens, decimals)
   let swaps = 0
   const aprs: number[] = []
-  for (const pool of allPools) {
+  for (const pool of activePools) {
     swaps += pool.swaps_24h
-    const value = poolValueUsdcx(pool, prices)
-    if (value === null) {
-      unpriced += 1
-      continue
-    }
-    tvl += value
-    const price0 = prices.get(pool.token0.toLowerCase()) ?? 0
-    const price1 = prices.get(pool.token1.toLowerCase()) ?? 0
-    volume += Number(pool.volume_24h_0) * price0 + Number(pool.volume_24h_1) * price1
     // Fee APR is swap income; a pool whose only activity is a deposit has not
     // earned a fee yet, and its zero would drag the median down.
     if (pool.swaps_24h > 0) {
       aprs.push(feeAprOneDay(pool.fee_apr, pool.fee_apr_window_secs))
     }
   }
-  setText(statTvl, `${formatAmount(BigInt(Math.round(tvl)), decimals)} USDCX`)
-  setText(statVolume, `${formatAmount(BigInt(Math.round(volume)), decimals)} USDCX`)
-  setText(statPools, `${allPools.length} pool${allPools.length === 1 ? '' : 's'}`)
+  setText(statTvl, `${formatAmount(totals.tvlBase, decimals)} USDCX`)
+  setText(statVolume, `${formatAmount(totals.volumeBase, decimals)} USDCX`)
+  setText(statPools, `${activePools.length} pool${activePools.length === 1 ? '' : 's'}`)
   setText(statSwaps, String(swaps))
 
   if (aprs.length === 0) {
@@ -627,11 +792,20 @@ function renderStats(): void {
   }
 
   const footer: string[] = [CONFIG.network]
+  if (indexerStatus?.version) footer.push(`indexer v${indexerStatus.version}`)
   if (indexerStatus !== null) {
     footer.push(`registry block ${indexerStatus.last_registry_block.toLocaleString('en-US')}`)
   }
-  footer.push(`${allPools.length} pools indexed`)
-  if (unpriced > 0) footer.push(`${unpriced} not priced in USDCX`)
+  footer.push(`${activePools.length} pools indexed`)
+  const unsupported = allPools.length - activePools.length
+  if (unsupported > 0) {
+    footer.push(`${unsupported} legacy`)
+  }
+  if (totals.excluded > 0) {
+    footer.push(
+      `${totals.excluded} ${totals.excluded === 1 ? 'pool holds' : 'pools hold'} no stablecoin`,
+    )
+  }
   setText(statFooter, footer.join(' · '))
   syncStatsHeight()
 }
@@ -644,7 +818,9 @@ function line(amount: string, symbol: string, title?: string): Child {
 /** Token metadata from the indexed pools: symbol and decimals by faucet id. */
 function routeTokenMeta(faucetId: string): TokenEntry | null {
   const wanted = faucetId.toLowerCase()
-  for (const pool of allPools) {
+  const verified = verifiedMeta.get(wanted)
+  if (verified) return verified
+  for (const pool of activePools()) {
     if (pool.token0.toLowerCase() === wanted && pool.token0_decimals !== null) {
       return { symbol: pool.token0_symbol ?? shortHex(faucetId), decimals: pool.token0_decimals }
     }
@@ -656,9 +832,14 @@ function routeTokenMeta(faucetId: string): TokenEntry | null {
 }
 
 /** The indexed token set: faucet id to symbol and decimals, sorted by symbol. */
+function activePools(): TablePool[] {
+  // Routable and countable pools only: not legacy, and not a seed with no LP.
+  return allPools.filter((pool) => !pool.legacy && !pool.seedOnly)
+}
+
 function routeTokenEntries(): Array<[string, TokenEntry]> {
   const tokens = new Map<string, { symbol: string; decimals: number }>()
-  for (const pool of allPools) {
+  for (const pool of activePools()) {
     const entries = [
       [pool.token0, pool.token0_symbol, pool.token0_decimals],
       [pool.token1, pool.token1_symbol, pool.token1_decimals],
@@ -679,7 +860,7 @@ function payTokenSource(): TokenSource {
     return { entries: [], emptyNote: 'Login to load your tokens.' }
   }
   if (walletTokensState === 'loading') {
-    return { entries: [], emptyNote: 'Loading your tokens…' }
+    return { entries: [], emptyNote: 'Loading your tokens …' }
   }
   if (walletTokens === null) {
     return { entries: [], emptyNote: 'No tradable token in this wallet.' }
@@ -692,7 +873,7 @@ function receiveTokenSource(): TokenSource {
   const all = routeTokenEntries()
   const pay = routeTokenIn.value.toLowerCase()
   if (!pay) return { entries: all }
-  const reachable = reachableTokens(routerPools(allPools), pay)
+  const reachable = reachableTokens(routerPools(activePools()), pay)
   const entries = all.filter(([id]) => reachable.has(id.toLowerCase()))
   return {
     entries,
@@ -710,7 +891,7 @@ function onPayTokenChanged(): void {
   routeAmount.value = ''
   const pay = routeTokenIn.value.toLowerCase()
   if (pay && routeTokenOut.value) {
-    const reachable = reachableTokens(routerPools(allPools), pay)
+    const reachable = reachableTokens(routerPools(activePools()), pay)
     if (!reachable.has(routeTokenOut.value.toLowerCase())) {
       routeTokenOut.value = ''
       routeOutCombo.refresh()
@@ -864,8 +1045,21 @@ function sanitizeAmountInput(value: string, decimals: number): string {
 
 /** Enables or disables the submit button, unless a run is in flight. */
 function setRouteButton(enabled: boolean, label: string): void {
-  routeSubmit.disabled = routeRunning || !enabled
-  if (!routeRunning) routeSubmit.textContent = label
+  // A paused deployment refuses every swap, a held route refuses a resubmit,
+  // and an unverified route is not submitted.
+  const blocked =
+    routeRunning || !enabled || !CONFIG.tradingEnabled || routeHeld || verifyingRoute || !routeVerified
+  routeSubmit.disabled = blocked
+  if (routeRunning) return
+  routeSubmit.textContent = !CONFIG.tradingEnabled
+    ? 'Under maintenance'
+    : routeHeld
+      ? 'Check your wallet'
+      : verifyingRoute
+        ? 'Verifying on chain…'
+        : !routeVerified
+          ? 'Unverified route'
+          : label
 }
 
 /** Renders the best route for the current inputs. */
@@ -942,7 +1136,7 @@ function renderSwapReceipt(route: Route, result: RouteResult): void {
   const last = result.hops[result.hops.length - 1]
   const received = last?.actual ? last.amountOut : result.amountOut
   const quoted = last?.actual ? '' : ' (quoted)'
-  const fee = routeFee(route, allPools)
+  const fee = routeFee(route, activePools())
   const network = result.hops.reduce((sum, hop) => sum + hop.fee, 0n)
   const feeAsset = result.hops.find((hop) => hop.feeFaucetId)?.feeFaucetId ?? ''
   const notes = result.hops.filter((hop) => hop.fee > 0n).length
@@ -999,8 +1193,62 @@ function retireRoute(route: Route): Route {
   const tokens = routeTokens(route)
   const from = tokens[0]
   const to = tokens[tokens.length - 1]
-  const fresh = findRoutes(routerPools(allPools), from, to, route.amountIn)[0]
+  const fresh = findRoutes(routerPools(activePools()), from, to, route.amountIn)[0]
   return fresh ?? route
+}
+
+/**
+ * Verifies a route against the chain before it can be submitted: every pool in
+ * it must be listed in the registry, and every token's decimals and symbol are
+ * read from its faucet account. The indexer supplies the list and the quote;
+ * the chain decides what may be traded and how the amount is parsed.
+ */
+async function verifyRoute(route: Route): Promise<void> {
+  const key = route.hops
+    .map((hop) => `${hop.poolId.toLowerCase()}:${hop.tokenIn.toLowerCase()}:${hop.tokenOut.toLowerCase()}`)
+    .join('|')
+  if (key === verifiedRouteKey && routeVerified) return
+  if (key === failedRouteKey) return
+  if (verifyingRoute) return
+  verifyingRoute = true
+  routeVerified = false
+  setRouteButton(false, 'Swap')
+  try {
+    const listed = await listedPools(route.hops.map((hop) => hop.poolId))
+    for (const hop of route.hops) {
+      if (!listed.has(normalizeHex(hop.poolId))) {
+        throw new Error(`Pool ${shortHex(hop.poolId)} is not listed in the chain registry.`)
+      }
+    }
+    const { BasicFungibleFaucetComponent } = await sdkModule()
+    const tokens = Array.from(
+      new Set(route.hops.flatMap((hop) => [hop.tokenIn.toLowerCase(), hop.tokenOut.toLowerCase()])),
+    )
+    for (const token of tokens) {
+      if (verifiedMeta.has(token)) continue
+      const account = await getPublicAccount(token)
+      const meta = BasicFungibleFaucetComponent.fromAccount(account)
+      verifiedMeta.set(token, {
+        decimals: meta.decimals(),
+        symbol: meta.symbol().toString(),
+      })
+    }
+    verifiedRouteKey = key
+    routeVerified = true
+    failedRouteKey = ''
+    // Reparse and re-quote with the verified decimals.
+    renderRouteQuote()
+  } catch (error) {
+    failedRouteKey = key
+    routeVerified = false
+    setText(
+      routeStatus,
+      `Cannot verify this route on chain: ${error instanceof Error ? error.message : String(error)} Trading stays disabled until it can be verified.`,
+    )
+  } finally {
+    verifyingRoute = false
+    setRouteButton(routeBest !== null, pendingRoute ? 'Retry' : 'Swap')
+  }
 }
 
 function renderRouteQuote(): void {
@@ -1023,7 +1271,7 @@ function renderRouteQuote(): void {
   const from = routeTokenIn.value
   const to = routeTokenOut.value
   if (!from || !to) {
-    stop(allPools.length === 0 ? 'No pools to route through yet.' : 'Pick two tokens.')
+    stop(activePools().length === 0 ? 'No pools to route through yet.' : 'Pick two tokens.')
     return
   }
   if (from === to) {
@@ -1053,7 +1301,7 @@ function renderRouteQuote(): void {
     return
   }
   if (walletTokensState === 'loading') {
-    stop('Loading your wallet balance…')
+    stop('Loading your wallet balance …')
     return
   }
   const held = walletTokens?.find(([id]) => id.toLowerCase() === from.toLowerCase())
@@ -1076,7 +1324,7 @@ function renderRouteQuote(): void {
     return
   }
 
-  const pools = routerPools(allPools)
+  const pools = routerPools(activePools())
   const best = findRoutes(pools, from, to, amountIn)[0]
   if (!best) {
     const direct = pools.find(
@@ -1093,13 +1341,14 @@ function renderRouteQuote(): void {
     return
   }
   routeBest = best
+  void verifyRoute(best)
   routeAmountOut.value = formatAmount(best.amountOut, metaOut.decimals)
 
   const minimum = (best.amountOut * (10_000n - slippage)) / 10_000n
   setText(routeMinOut, `min ${formatAmount(minimum, metaOut.decimals)} ${metaOut.symbol}`)
 
   const rate = routeRate(best.amountIn, best.amountOut, metaIn, metaOut)
-  const fee = routeFee(best, allPools)
+  const fee = routeFee(best, activePools())
   const lines: Node[] = [
     detailRow('Rate', `1 ${metaIn.symbol} = ${rate} ${metaOut.symbol}`),
     detailRow(
@@ -1133,6 +1382,10 @@ function renderRouteQuote(): void {
 }
 
 async function doRouteSwap(): Promise<void> {
+  if (!routeVerified || verifyingRoute) {
+    toast('The route is still being verified on chain. Try again in a moment.', 'error')
+    return
+  }
   const pending = pendingRoute
   // A retry keeps the resume point, not the old quote: the first attempt may
   // have failed because reserves moved, and reusing its amounts would fail the
@@ -1163,9 +1416,8 @@ async function doRouteSwap(): Promise<void> {
   try {
     const result = await executeRoute({
       route,
-      pools: allPools,
+      pools: activePools(),
       slippageBps: slippage,
-      deadlineMarginSeconds: 3600n,
       startHop: pending?.nextHop ?? 0,
       startStage: pending?.stage,
       startAmountIn: pending?.amountIn,
@@ -1187,19 +1439,28 @@ async function doRouteSwap(): Promise<void> {
     void refreshWalletTokens()
   } catch (error) {
     if (error instanceof HopFailure) {
-      routeSubmit.textContent = 'Retry'
-      renderRouteProgress(
-        route,
-        error.hopIndex,
-        `${error.message} Retry to continue from hop ${error.hopIndex + 1}.`,
-      )
+      if (error.unknown) {
+        routeHeld = true
+        renderRouteProgress(
+          route,
+          error.hopIndex,
+          `${error.message} Do not resubmit: check your wallet, then reload.`,
+        )
+      } else {
+        routeSubmit.textContent = 'Retry'
+        renderRouteProgress(
+          route,
+          error.hopIndex,
+          `${error.message} Retry to continue from hop ${error.hopIndex + 1}.`,
+        )
+      }
     } else {
       toast(error instanceof Error ? error.message : String(error), 'error')
       setText(routeStatus, '')
     }
   } finally {
     routeRunning = false
-    routeSubmit.disabled = false
+    setRouteButton(routeBest !== null, pendingRoute ? 'Retry' : 'Swap')
   }
 }
 

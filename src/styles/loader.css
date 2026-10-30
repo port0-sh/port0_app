@@ -1,0 +1,41 @@
+/*
+ * The loader's frame is part of the document, so these rules are inlined into the
+ * head by the build instead of waiting for the CSS bundle. One text block: the
+ * ship prints green, the water one step down.
+ */
+.loader {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  font-size: 1.05em;
+  line-height: 1.15;
+  font-family: "Victor Mono", monospace;
+  user-select: none;
+}
+
+.loader-text {
+  margin: 0;
+  white-space: pre;
+  color: var(--green);
+  text-shadow: 0 0 8px rgb(0 242 57 / 35%);
+}
+
+.loader-water {
+  color: var(--dark-green);
+  text-shadow: none;
+}
+
+/* The grey line under the drawing: what the read is waiting for. */
+.loader-detail {
+  margin: 0.6rem 0 0;
+  text-align: center;
+}
+
+/* The index's loader sits between the toolbar and the table. */
+.loader-host {
+  margin-bottom: 0.75rem;
+}
+
+.loader-host:empty {
+  display: none;
+}

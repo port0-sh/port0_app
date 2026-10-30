@@ -118,6 +118,8 @@ export interface IndexerStatus {
   last_registry_block: number
   known_pools: number
   fetched_pools: number
+  /** The indexer's own version, when it reports one. */
+  version?: string
 }
 
 /** Reads the indexer's status, or null when it is unavailable. */
@@ -129,6 +131,32 @@ export async function fetchStatus(indexerUrl: string): Promise<IndexerStatus | n
   } catch {
     return null
   }
+}
+
+/** A pool of a legacy registry, read once by the indexer at startup. */
+export interface LegacyPool {
+  id: string
+  registry_id: string
+  token0: string
+  token1: string
+  token0_symbol: string
+  token0_decimals: number
+  token1_symbol: string
+  token1_decimals: number
+  reserve0: string
+  reserve1: string
+  lp_supply: string
+  lp_fee_bps: number
+  protocol_fee_share_bps: number
+}
+
+/** The pools of the legacy registries, as the indexer read them at startup. */
+export async function fetchLegacyPools(indexerUrl: string): Promise<LegacyPool[]> {
+  const response = await fetch(new URL('legacy', baseUrl(indexerUrl)))
+  if (!response.ok) {
+    throw new Error(`indexer /legacy returned ${response.status}`)
+  }
+  return (await response.json()) as LegacyPool[]
 }
 
 /** One history sample. Amounts are decimal strings; see the file header. */
@@ -173,27 +201,90 @@ export async function fetchPool(
   return (await response.json()) as IndexerPool
 }
 
+/** A transaction on an activity row: what it did and with how much, per token. */
+export interface TradeDto {
+  /** `swap`, `add`, `remove`, `collect`, or `other`. */
+  kind: string
+  tx_id: string
+  /** Swap input per token, protocol fee included. */
+  volume0: string
+  volume1: string
+  /** Reserves the transaction added. */
+  in0: string
+  in1: string
+  /** Reserves it paid out. */
+  out0: string
+  out1: string
+  /** False when the amounts were not recorded when the row was captured. */
+  exact: boolean
+  /** Pot a collect freed. */
+  protocol_fee0: string
+  protocol_fee1: string
+}
+
+/** One row of the pool's activity: a price observation or a transaction. */
+/** The price a transaction traded at, as a ratio of base-unit amounts. */
+export interface ActivityPrice {
+  /** Token1 base units. */
+  num: string
+  /** Token0 base units. */
+  den: string
+}
+
+/** One row of the pool's activity table: a transaction and its price. */
+export interface ActivityRow {
+  /** The block's timestamp, in seconds. */
+  timestamp: number
+  block: number
+  /** Token1 per token0, from the transaction's own amounts. */
+  price?: ActivityPrice
+  trade: TradeDto
+}
+
+/** The chart's buckets and the table's rows, from one request. */
+export interface PoolActivity {
+  samples: IndexerSnapshot[]
+  activity: ActivityRow[]
+  /** Recorded transactions the table leaves out because they carry no amounts. */
+  unrecorded: number
+}
+
 /**
- * Fetches the pool's sampled history. The indexer keeps 24 h and buckets it at
- * one sample per minute, five minutes, or one hour.
+ * Fetches the pool's activity in one request: the buckets to draw and the rows
+ * to list, with each transaction already priced from the last observation at or
+ * before its block.
  */
-export async function fetchPoolHistory(
+export async function fetchPoolActivity(
   indexerUrl: string,
   poolId: string,
   resolution: HistoryResolution,
-): Promise<IndexerSnapshot[]> {
+  limit = 24,
+): Promise<PoolActivity> {
   const url = new URL(
-    `pools/${encodeURIComponent(normalizeHex(poolId))}/history`,
+    `pools/${encodeURIComponent(normalizeHex(poolId))}/activity`,
     baseUrl(indexerUrl),
   )
   url.searchParams.set('resolution', resolution)
+  url.searchParams.set('limit', String(limit))
   const response = await fetch(url)
-  if (response.status === 404) return []
   if (!response.ok) {
-    throw new Error(`indexer /pools/${poolId}/history returned ${response.status}`)
+    throw new Error(`indexer /pools/${poolId}/activity returned ${response.status}`)
   }
-  return (await response.json()) as IndexerSnapshot[]
+  const body = (await response.json()) as PoolActivity
+  // The table lists named operations. An indexer that predates that sends
+  // observation rows beside the trades, and marks a transaction it cannot
+  // describe as `other`; neither is a table row. The newer payload already
+  // leaves both out and sends the count it dropped.
+  const rowIsTrade = (row: ActivityRow): boolean =>
+    row.trade !== undefined && row.trade.kind !== 'other'
+  return {
+    samples: body.samples,
+    activity: body.activity.filter(rowIsTrade),
+    unrecorded:
+      body.unrecorded ?? body.activity.filter((row) => row.trade?.kind === 'other').length,
+  }
 }
+
 
 /**
  * Maps an indexed pool to a view, resolving the note fee schedule roots to

@@ -61,7 +61,7 @@ export function mountTokenCombo(
   // thread, which chops any animation and makes a spinner look stuck.
   const idlePlaceholder = input.placeholder
   const setLoading = (loading: boolean): void => {
-    input.placeholder = loading ? 'Loading tokens…' : idlePlaceholder
+    input.placeholder = loading ? 'Loading tokens …' : idlePlaceholder
   }
 
   const close = (): void => {

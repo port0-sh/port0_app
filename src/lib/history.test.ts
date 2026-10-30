@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { candles, formatScaled, historyPoints, priceScaled, sampleTime, scaledToNumber } from './history'
+import {
+  candles,
+  formatScaled,
+  historyPoints,
+  priceFromAmounts,
+  priceScaled,
+  sampleTime,
+  sampleWindow,
+  scaledToNumber,
+  windowLabel,
+} from './history'
 import type { IndexerSnapshot } from './indexer'
 
 /** A sample with every field the price path reads. */
@@ -45,6 +55,23 @@ function bucket(
     low_reserve1: low,
   }
 }
+
+describe('priceFromAmounts', () => {
+  it('is the same price priceScaled reads from reserves', () => {
+    // A trade of 200 base units in for 300 base units out, both 4 decimals.
+    expect(priceFromAmounts('300', '200', 4, 4)).toBe(priceScaled(sample('200', '300'), 4, 4))
+  })
+
+  it('returns null for a zero side', () => {
+    expect(priceFromAmounts('0', '200', 4, 4)).toBeNull()
+    expect(priceFromAmounts('300', '0', 4, 4)).toBeNull()
+  })
+
+  it('scales by the decimal difference', () => {
+    // 293.395301 MICO (4 decimals) for 0.949385 USDCX (6 decimals).
+    expect(priceFromAmounts('949385', '293395301', 4, 6)).toBe(32n)
+  })
+})
 
 describe('priceScaled', () => {
   it('returns null when either reserve is zero', () => {
@@ -161,5 +188,50 @@ describe('candles', () => {
     // A pool that has not traded keeps one block timestamp across buckets.
     const idle = { ...bucket(1791591842, '1', '1', '1', '4'), polled_at: 1791591900 }
     expect(candles([idle], 0, 0)[0].time).toBe(1791591900)
+  })
+})
+
+describe('windowLabel', () => {
+  it('names the span the samples cover', () => {
+    expect(windowLabel(12 * 60 * 60)).toBe('Last 12 hours')
+    expect(windowLabel(20 * 60 * 60)).toBe('Last 20 hours')
+    expect(windowLabel(7 * 24 * 60 * 60)).toBe('Last 7 days')
+    expect(windowLabel(30 * 24 * 60 * 60)).toBe('Last 30 days')
+    expect(windowLabel(180 * 24 * 60 * 60)).toBe('Last 180 days')
+  })
+
+  it('uses minutes for a young series and singulars for one unit', () => {
+    expect(windowLabel(90)).toBe('Last 2 minutes')
+    expect(windowLabel(3_600)).toBe('Last 1 hour')
+    expect(windowLabel(86_400)).toBe('Last 24 hours')
+    expect(windowLabel(30 * 3_600)).toBe('Last 30 hours')
+    expect(windowLabel(2 * 86_400)).toBe('Last 2 days')
+  })
+})
+
+describe('sampleWindow', () => {
+  it('is the span between the first and last observation', () => {
+    const at = (polledAt: number): IndexerSnapshot => ({ ...sample('1', '1'), polled_at: polledAt })
+    expect(sampleWindow([at(100), at(200), at(500)])).toBe(400)
+  })
+
+  it('ignores the state time, which an idle pool repeats', () => {
+    const idle = (polledAt: number): IndexerSnapshot => ({
+      ...sample('1', '1'),
+      timestamp: 7,
+      polled_at: polledAt,
+    })
+    expect(sampleWindow([idle(1_000), idle(4_600)])).toBe(3_600)
+  })
+
+  it('is null with fewer than two samples or no movement', () => {
+    expect(sampleWindow([])).toBeNull()
+    expect(sampleWindow([sample('1', '1')])).toBeNull()
+    expect(
+      sampleWindow([
+        { ...sample('1', '1'), polled_at: 5 },
+        { ...sample('1', '1'), polled_at: 5 },
+      ]),
+    ).toBeNull()
   })
 })

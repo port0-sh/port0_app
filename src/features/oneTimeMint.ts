@@ -173,7 +173,10 @@ export function openOneTimeMint(): void {
       // call below takes the hex string rather than a main-thread handle.
       const faucetAddress = faucet.id().toBech32(chainId, AccountInterface.BasicWallet)
       setText(status, 'Step 2/6: asking the wallet to fund the faucet')
-      const sendTxId = await sendViaWallet(faucetAddress, CONFIG.chainFeeFaucetId, funding)
+      // Plain P2ID: the faucet's auth allowlists P2ID and not P2IDE.
+      const sendTxId = await sendViaWallet(faucetAddress, CONFIG.chainFeeFaucetId, funding, {
+        recall: false,
+      })
       setText(status, 'Step 3/6: waiting for the funding to confirm')
       await waitForTransaction(sendTxId)
 
@@ -211,8 +214,12 @@ export function openOneTimeMint(): void {
       faucetLine.setAttribute('title', faucetId)
       setText(faucetLine, `${name} · ${shortHex(faucetId)}`)
       result.hidden = false
-      setText(status, 'Minted')
-      toast(`${name} minted: the whole supply is in your wallet.`)
+      setText(status, 'Minted: the supply arrives as a note')
+      toast(
+        `${name} minted. The whole supply is a note addressed to your wallet; accept it in Bread to see the balance.`,
+        'info',
+        12000,
+      )
     } catch (error) {
       console.error('[one-time-mint]', error)
       setText(status, error instanceof Error ? error.message : String(error))

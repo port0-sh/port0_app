@@ -27,11 +27,28 @@ export function priceScaled(
   token0Decimals: number,
   token1Decimals: number,
 ): bigint | null {
-  const reserve0 = BigInt(sample.reserve0)
-  const reserve1 = BigInt(sample.reserve1)
-  if (reserve0 === 0n || reserve1 === 0n) return null
-  const numerator = reserve1 * 10n ** BigInt(token0Decimals) * 10n ** BigInt(PRICE_DIGITS)
-  const denominator = reserve0 * 10n ** BigInt(token1Decimals)
+  return priceFromAmounts(sample.reserve1, sample.reserve0, token0Decimals, token1Decimals)
+}
+
+/**
+ * Price of one token0 in token1 from two base-unit amounts, scaled by
+ * 10^PRICE_DIGITS. Returns null when either amount is zero.
+ *
+ * The two tokens have their own decimals, so the numerator carries token0's
+ * decimals and the denominator token1's: `num / 10^token1Decimals` is token1
+ * units, `den / 10^token0Decimals` token0 units, and their ratio is the price.
+ */
+export function priceFromAmounts(
+  num: string,
+  den: string,
+  token0Decimals: number,
+  token1Decimals: number,
+): bigint | null {
+  const numeratorUnits = BigInt(num)
+  const denominatorUnits = BigInt(den)
+  if (numeratorUnits === 0n || denominatorUnits === 0n) return null
+  const numerator = numeratorUnits * 10n ** BigInt(token0Decimals) * 10n ** BigInt(PRICE_DIGITS)
+  const denominator = denominatorUnits * 10n ** BigInt(token1Decimals)
   return numerator / denominator
 }
 
@@ -55,6 +72,34 @@ export function formatScaled(scaled: bigint, digits = PRICE_DIGITS): string {
   const whole = scaled / scale
   const fraction = (scaled % scale).toString().padStart(digits, '0').replace(/0+$/, '')
   return fraction.length > 0 ? `${whole}.${fraction}` : whole.toString()
+}
+
+/**
+ * How much time the chart actually covers: the span between the first and the
+ * last observation, the same clock the candles are drawn on. A pool that has not
+ * changed keeps one state time across every bucket, so the state time cannot
+ * measure the window; the poll time can.
+ */
+export function sampleWindow(samples: readonly IndexerSnapshot[]): number | null {
+  if (samples.length < 2) return null
+  const first = samples[0].polled_at
+  const last = samples[samples.length - 1].polled_at
+  return last > first ? last - first : null
+}
+
+/** The window as words: minutes under an hour, hours under two days, then days. */
+export function windowLabel(seconds: number): string {
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) {
+    return `Last ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`
+  }
+  const hours = Math.round(minutes / 60)
+  if (hours < 48) {
+    return `Last ${hours} ${hours === 1 ? 'hour' : 'hours'}`
+  }
+  // Two days is the point where days read better than hours, so the plural is
+  // the only form this branch can produce.
+  return `Last ${Math.round(hours / 24)} days`
 }
 
 /** The scaled price as a Number, for chart geometry only. */

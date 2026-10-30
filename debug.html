@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>port0 debug</title>
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="stylesheet" href="/src/styles/global.css" />
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">port0</a>
+    <span id="wallet-slot"></span>
+  </header>
+  <main class="panel" style="max-width: 760px; margin: 2rem auto; padding: 1.5rem">
+    <h1>Debug</h1>
+    <p class="muted">
+      Built only for wallet edge-case testing. The page is unlinked and not indexed.
+      Set <code>VITE_DEBUG_PAGE=1</code> at build time and open <code>/debug.html</code>.
+    </p>
+
+    <h2>Wallet</h2>
+    <p id="wallet-state" class="mono"></p>
+    <button id="sync" class="btn">Sync and show block height</button>
+    <output id="height" class="mono"></output>
+
+    <h2>Send with recall</h2>
+    <form id="send-form">
+      <label for="send-recipient">Recipient (hex or bech32)</label>
+      <input id="send-recipient" required />
+      <label for="send-faucet">Faucet id</label>
+      <input id="send-faucet" required />
+      <label for="send-amount">Amount, base units</label>
+      <input id="send-amount" type="number" min="1" required />
+      <button type="submit" class="btn">Send via wallet</button>
+    </form>
+    <p class="hint">
+      The app passes <code>recallBlocks = 20</code>. After about 20 blocks the note must appear
+      under Wallet notes for the sender if Bread built a P2IDE.
+    </p>
+
+    <h2>Wallet notes</h2>
+    <button id="notes" class="btn">List consumable notes</button>
+    <div id="notes-list"></div>
+
+    <h2>Faulty trade</h2>
+    <form id="fault-form">
+      <label for="fault-op">Operation</label>
+      <select id="fault-op">
+        <option value="swap">swap</option>
+        <option value="add">add liquidity</option>
+        <option value="remove">remove liquidity</option>
+      </select>
+      <label for="fault-pool">Pool id</label>
+      <input id="fault-pool" required />
+      <label for="fault-token">Token in (swap only)</label>
+      <input id="fault-token" placeholder="defaults to the pool's token0" />
+      <label for="fault-amount0">Amount 0 (swap in, add token0, remove LP)</label>
+      <input id="fault-amount0" type="number" min="1" required />
+      <label for="fault-amount1">Amount 1 (add only)</label>
+      <input id="fault-amount1" type="number" min="0" />
+      <label for="fault-scale">Quote error factor (above 1 makes the minimum unreachable)</label>
+      <input id="fault-scale" value="2" required />
+      <label for="fault-mode">Fault</label>
+      <select id="fault-mode">
+        <option value="unreachable">unreachable minimum</option>
+        <option value="expired">expired deadline</option>
+      </select>
+      <button type="submit" class="btn">Emit the faulty trade</button>
+    </form>
+    <p class="hint">
+      The note is valid and targets a real pool. With an unreachable minimum the quote is taken
+      against a scaled pool, so the pool cannot pay it; with an expired deadline the pool refunds
+      at expiry. Either way the input comes back as a P2ID under Wallet notes.
+    </p>
+
+    <pre id="log" class="mono" style="white-space: pre-wrap"></pre>
+  </main>
+  <script type="module" src="/src/pages/debug.ts"></script>
+</body>
+</html>

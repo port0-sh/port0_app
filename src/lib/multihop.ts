@@ -51,14 +51,20 @@ export type HopStage = 'submit' | 'consume'
 export class HopFailure extends Error {
   readonly hopIndex: number
   readonly stage: HopStage
+  /** The submission may still land: a retry could duplicate it. */
+  readonly unknown: boolean
 
-  constructor(message: string, hopIndex: number, stage: HopStage) {
+  constructor(message: string, hopIndex: number, stage: HopStage, unknown = false) {
     super(message)
     this.name = 'HopFailure'
     this.hopIndex = hopIndex
     this.stage = stage
+    this.unknown = unknown
   }
 }
+
+/** A wait that ended without proof of failure: the submission may still land. */
+class SubmissionUnknown extends Error {}
 
 /** One hop as it executed, for the receipt the card shows afterwards. */
 export interface ExecutedHop {
@@ -214,8 +220,8 @@ async function acquireIntermediate(
     }
 
     if (Date.now() > deadline) {
-      throw new Error(
-        `The pool has not paid ${shortHex(wanted)} yet. Accept the token in your wallet and retry.`,
+      throw new SubmissionUnknown(
+        `The pool has not paid ${shortHex(wanted)} yet. The hop may still land: check your wallet before retrying.`,
       )
     }
     onWait(
@@ -238,7 +244,6 @@ export async function executeRoute(options: {
   route: Route
   pools: readonly IndexerPool[]
   slippageBps: bigint
-  deadlineMarginSeconds: bigint
   startHop?: number
   startStage?: HopStage
   startAmountIn?: bigint
@@ -250,7 +255,6 @@ export async function executeRoute(options: {
     route,
     pools,
     slippageBps,
-    deadlineMarginSeconds,
     startHop = 0,
     startStage = 'submit',
     startAmountIn,
@@ -292,6 +296,9 @@ export async function executeRoute(options: {
     let stage: HopStage = index === startHop ? startStage : 'submit'
     executed[index] = { ...executed[index], amountIn }
     let balanceBefore = index === startHop && startStage === 'consume' ? startBalanceBefore : 0n
+    // Once a submission returns an id, any later error is "unknown": the
+    // transaction may still land, so the caller must not auto-retry.
+    let submitted = false
     try {
       if (stage === 'submit') {
         const view = views.get(hop.poolId)
@@ -332,16 +339,18 @@ export async function executeRoute(options: {
           feeFaucetId: view.feeFaucetId,
         }
         const pool = xyk.pool({ poolId: poolAccountId, feeFaucetId, noteFees })
-        const deadline = BigInt(Math.floor(Date.now() / 1000)) + deadlineMarginSeconds
+        // Spot per hop: a hop that cannot fill is refunded by the pool, and the
+        // route stops instead of waiting out the deadline.
         const output = await pool.swap({
           sender,
           recipient: sender,
           tokenIn: AccountId.fromHex(withHexPrefix(hop.tokenIn)),
           amountIn,
           slippageBps,
-          deadline,
+          deadline: 0n,
         })
         const txId = await submitViaWallet(output.request)
+        submitted = true
         txIds.push(txId)
         await waitForTransaction(txId)
       }
@@ -363,6 +372,7 @@ export async function executeRoute(options: {
           phase: 'confirm-consume',
           message: 'Confirm accepting the token in your wallet…',
         })
+        submitted = true
         txIds.push(acquired.consumeTxId)
         await waitForTransaction(acquired.consumeTxId)
       }
@@ -370,7 +380,12 @@ export async function executeRoute(options: {
       amountIn = acquired.amount
     } catch (error) {
       if (error instanceof HopFailure) throw error
-      throw new HopFailure(error instanceof Error ? error.message : String(error), index, stage)
+      throw new HopFailure(
+        error instanceof Error ? error.message : String(error),
+        index,
+        stage,
+        submitted || error instanceof SubmissionUnknown,
+      )
     }
   }
 

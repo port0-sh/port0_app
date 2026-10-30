@@ -3,7 +3,9 @@ import {
   DEFAULT_LP_FEE_BPS,
   FEE_APR_WINDOW_SECS,
   LP_FEE_TIERS_BPS,
+  POOL_DEPLOY_FEE_BASE_UNITS,
   feeAprOneDay,
+  launchCostLine,
 } from './fees'
 
 
@@ -29,5 +31,19 @@ describe('feeAprOneDay', () => {
   it('is zero for a missing window or a non-finite rate', () => {
     expect(feeAprOneDay(0.2, 0)).toBe(0)
     expect(feeAprOneDay(Number.NaN, 900)).toBe(0)
+  })
+})
+
+describe('launch cost', () => {
+  it('shows the register price, the network fee, and their total', () => {
+    expect(launchCostLine(119n, POOL_DEPLOY_FEE_BASE_UNITS, 6, 'USDCX')).toBe(
+      'Registry fee: 0.000119 USDCX + network fee: 0.00014 USDCX = 0.000259 USDCX',
+    )
+  })
+
+  it('formats every amount with the fee asset decimals', () => {
+    expect(launchCostLine(1_000_000n, 140n, 6, 'USDCX')).toBe(
+      'Registry fee: 1 USDCX + network fee: 0.00014 USDCX = 1.00014 USDCX',
+    )
   })
 })

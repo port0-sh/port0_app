@@ -9,23 +9,28 @@
  * signs, submits and confirms.
  */
 
-import { lpTokenSymbol, type Pool, type PoolConfig, type PoolState } from '@port0.sh/sdk'
+import { fetchPoolState, lpTokenSymbol, readRegistryPools, type Pool, type PoolConfig, type PoolState } from '@port0.sh/sdk'
 import type { AccountId } from '@miden-sdk/miden-sdk'
 import {
   getClient,
   getFreshAccount,
+  getRpc,
   getXyk,
   resetClient,
   sdkModule,
+  getPublicAccount,
   xykModule,
   type XykModule,
 } from '../lib/client'
 import { CONFIG } from '../lib/config'
+import { actionState, gateMessage, type GateState, type PoolAction } from '../lib/gating'
+import { listedPools } from '../lib/registry'
 import { chainNetworkId } from '../lib/network'
-import { clear, el, qs, setText } from '../lib/dom'
+import { clear, el, qs, setText, type Child } from '../lib/dom'
 import {
   compactAmount,
   explorerAccountUrl,
+  explorerTxUrl,
   feeSplit,
   formatAmount,
   formatBps,
@@ -40,12 +45,19 @@ import {
   withHexPrefix,
 } from '../lib/format'
 import { feeAprOneDay } from '../lib/fees'
-import { fetchPool, fetchPoolHistory, toPoolView, type HistoryResolution, type IndexerPool, type IndexerSnapshot, type PoolView } from '../lib/indexer'
-import { candles, formatScaled, priceScaled, sampleTime } from '../lib/history'
+import { fetchPool, fetchPoolActivity, toPoolView, type ActivityRow, type HistoryResolution, type IndexerPool, type IndexerSnapshot, type PoolView, type TradeDto } from '../lib/indexer'
+import {
+  candles,
+  formatScaled,
+  priceFromAmounts,
+  priceScaled,
+  sampleWindow,
+  windowLabel,
+} from '../lib/history'
 import { mountPriceChart, type ChartTheme, type PriceChart } from '../lib/chart'
 import { mountSite } from '../lib/site'
 import { playArrivalBell, primeSound } from '../lib/sound'
-import { startSpinner } from '../ui/spinner'
+import { adoptLoader } from '../ui/spinner'
 import { mountTokenCombo, type TokenSource } from '../ui/tokenCombo'
 import { toast } from '../ui/toast'
 import { mountWallet } from '../wallet/ui'
@@ -64,7 +76,6 @@ import {
  * last-seen block timestamp, plus this margin, so both client clock skew and
  * note settlement delay are absorbed. 3600 = one hour.
  */
-const DEADLINE_MARGIN_SECONDS = 3600n
 
 mountWallet()
 mountSite()
@@ -77,6 +88,7 @@ const poolIdHex = poolIdParam ? normalizeHex(poolIdParam) : null
 
 const pairTitle = qs<HTMLElement>(document, '#pool-pair')
 const poolIdLine = qs<HTMLElement>(document, '#pool-id')
+const poolTokensLine = qs<HTMLElement>(document, '#pool-tokens')
 const poolError = qs<HTMLParagraphElement>(document, '#pool-error')
 const statFee = qs<HTMLElement>(document, '#stat-fee')
 const statVolume = qs<HTMLElement>(document, '#stat-volume')
@@ -99,6 +111,7 @@ const addAmount0 = qs<HTMLInputElement>(document, '#add-amount0')
 const addAmount1 = qs<HTMLInputElement>(document, '#add-amount1')
 const addSlippage = qs<HTMLInputElement>(document, '#add-slippage')
 const addQuote = qs<HTMLDivElement>(document, '#add-quote')
+const addRisk = qs<HTMLParagraphElement>(document, '#add-risk')
 const addSubmit = qs<HTMLButtonElement>(document, '#add-submit')
 const addStatus = qs<HTMLDivElement>(document, '#add-status')
 
@@ -111,8 +124,8 @@ const removeStatus = qs<HTMLDivElement>(document, '#remove-status')
 const poolGate = qs<HTMLParagraphElement>(document, '#pool-gate')
 const poolStats = qs<HTMLElement>(document, '#pool-stats')
 const poolBoot = qs<HTMLElement>(document, '#pool-boot')
-const poolBootGlyph = qs<HTMLElement>(document, '#pool-boot-glyph')
-const poolBootTitle = qs<HTMLElement>(document, '#pool-boot-title')
+const pageBody = qs<HTMLElement>(document, '#page-body')
+const poolBootScan = qs<HTMLElement>(document, '#pool-boot-scan')
 const poolBootDetail = qs<HTMLElement>(document, '#pool-boot-detail')
 const priceNow = qs<HTMLElement>(document, '#price-now')
 const priceNowValue = qs<HTMLElement>(document, '#price-now-value')
@@ -122,11 +135,11 @@ const priceNowUnit = qs<HTMLElement>(document, '#price-now-unit')
 const historyPanel = qs<HTMLElement>(document, '#history-panel')
 const historyChart = qs<HTMLElement>(document, '#history-chart')
 const historyNote = qs<HTMLElement>(document, '#history-note')
+const activityNote = qs<HTMLElement>(document, '#activity-note')
 const historyTable = qs<HTMLTableElement>(document, '#history-table')
 const historyRows = qs<HTMLElement>(document, '#history-rows')
 const historyResolutionPicker = qs<HTMLElement>(document, '#history-resolution')
-const historyReserve0Head = qs<HTMLElement>(document, '#history-reserve0-head')
-const historyReserve1Head = qs<HTMLElement>(document, '#history-reserve1-head')
+const historySpan = qs<HTMLElement>(document, '#history-span')
 
 let record: PoolView | null = null
 let indexedPool: IndexerPool | null = null
@@ -148,7 +161,7 @@ function sleep(ms: number): Promise<void> {
 let stopBoot: (() => void) | null = null
 
 function startBootLoader(): void {
-  stopBoot ??= startSpinner(poolBootGlyph)
+  stopBoot ??= adoptLoader(poolBootScan)
 }
 
 function stopBootLoader(): void {
@@ -173,14 +186,11 @@ async function waitForPool(): Promise<PoolView | null> {
       if (indexed) {
         const view = await toPoolView(indexed)
         indexedPool = indexed
-        stopBootLoader()
-        poolBoot.hidden = true
         return view
       }
       // A pool that exists but has not reached the indexer yet is a loading
       // state, not a missing one. Only the launch flow knows it just created a
       // pool, and it says so in the URL; everything else is a general wait.
-      setText(poolBootTitle, justCreated ? 'Looking for this pool' : 'Loading pool')
       setText(
         poolBootDetail,
         justCreated
@@ -189,11 +199,10 @@ async function waitForPool(): Promise<PoolView | null> {
             : 'Still waiting. The indexer has not seen this pool yet; its registration ' +
               'may still be confirming.'
           : attempt < 12
-            ? 'Reading this pool from the indexer and the chain.'
+            ? 'Reading this pool from the indexer and the chain...'
             : 'Still not visible. Check the pool id, or register the pool from the Launch page.',
       )
     } catch {
-      setText(poolBootTitle, 'Pool data is unavailable')
       setText(poolBootDetail, 'The pool service cannot be reached. Trying again…')
     }
     await sleep(POOL_POLL_MS)
@@ -201,8 +210,17 @@ async function waitForPool(): Promise<PoolView | null> {
 }
 
 async function boot(): Promise<void> {
+  // The tabs are page chrome, not pool state: wire them before anything can
+  // fail, so the hash still selects a tab and its notices when a pool does not
+  // load.
+  setupTabs()
+  startLoadingPage()
   if (!poolIdHex) {
     showPoolError('No pool id in the URL. Use ?id=<pool account id>.')
+    return
+  }
+  if (await poolIsLegacy()) {
+    await bootLegacy()
     return
   }
   if (CONFIG.indexerUrl.length === 0) {
@@ -212,7 +230,16 @@ async function boot(): Promise<void> {
   const view = await waitForPool()
   if (!view) return
   record = view
+  seedOnlyMode = indexedPool !== null && BigInt(indexedPool.lp_supply) <= MINIMUM_LP_SUPPLY
+  void verifyListing()
+  void verifyTokenMeta()
   setText(pairTitle, `${record.token0Symbol} / ${record.token1Symbol}`)
+  setText(
+    poolTokensLine,
+    `${record.token0Symbol} ${shortHex(record.token0FaucetId)} · ${record.token1Symbol} ${shortHex(record.token1FaucetId)}`,
+  )
+  poolTokensLine.hidden = false
+  poolTokensLine.setAttribute('title', `${record.token0FaucetId}\n${record.token1FaucetId}`)
   setText(poolIdLine, poolIdHex)
   poolIdLine.setAttribute('title', poolIdHex)
   poolStats.hidden = false
@@ -222,10 +249,10 @@ async function boot(): Promise<void> {
   if (record.feeFaucetId.length === 0) {
     toast('Trading is disabled for this pool: it has no fee asset configured.', 'error', 12000)
   }
-  setupTabs()
   setupForms()
   setupHistory()
   renderWalletGating()
+  showLoadedPage()
   walletStore.subscribe(() => {
     renderWalletGating()
     void refreshBalances()
@@ -245,7 +272,29 @@ async function boot(): Promise<void> {
   }, HISTORY_REFRESH_MS)
 }
 
+/**
+ * The whole page waits behind the loader, not just one panel.
+ *
+ * The legacy check and the indexer fetch both run after this point, and the
+ * legacy check imports an account, which takes about a second. The page body
+ * stays hidden until the pool's own data is rendered, so no skeleton shows while
+ * the page is still deciding what it is.
+ */
+function startLoadingPage(): void {
+  pageBody.hidden = true
+  poolBoot.hidden = false
+  startBootLoader()
+}
+
+/** Reveals the page once its data is rendered; the loader leaves with the work. */
+function showLoadedPage(): void {
+  stopBootLoader()
+  poolBoot.hidden = true
+  pageBody.hidden = false
+}
+
 function showPoolError(message: string): void {
+  showLoadedPage()
   poolError.hidden = false
   setText(poolError, message)
 }
@@ -323,6 +372,10 @@ async function loadState(): Promise<void> {
       // quote reads the store. Both must see the same account.
       const account = await getFreshAccount(AccountId.fromHex(withHexPrefix(poolIdHex)))
       currentState = decodePoolState(account)
+      // The chain state is the freshest supply there is: recompute the no-liquidity
+      // state before anything renders, or a first deposit leaves the page saying
+      // the pool has no providers.
+      seedOnlyMode = currentState.lpSupply <= MINIMUM_LP_SUPPLY
       chainUnavailable = null
       poolError.hidden = true
       populateSwapSide()
@@ -381,6 +434,12 @@ function spotPrice(state: { reserve0: string; reserve1: string }): string | null
  */
 function renderPriceNow(state: { reserve0: string; reserve1: string } | null): void {
   if (!record) return
+  if (seedOnlyMode) {
+    setText(priceNowValue, '—')
+    setText(priceNowReverse, '')
+    setText(priceNowUnit, 'No liquidity providers; this ratio is not a market price.')
+    return
+  }
   const forward = state ? spotPrice(state) : null
   const reverse =
     state && record
@@ -564,8 +623,14 @@ async function refreshRecord(): Promise<void> {
     if (pool) {
       indexedPool = pool
       record = await toPoolView(pool)
+      // The indexer's supply fills in until a chain read lands; once it has, the
+      // chain is fresher and keeps the answer.
+      if (currentState === null) {
+        seedOnlyMode = BigInt(pool.lp_supply) <= MINIMUM_LP_SUPPLY
+      }
       renderIndexedPrice()
       renderPoolStats()
+      renderWalletGating()
     }
   } catch {
     // The indexer is the pool source; a failed poll leaves the last view in place.
@@ -607,8 +672,8 @@ function watchUntilChanged(before: PoolState, status: HTMLSpanElement): void {
 
 /* Pool history: a lightweight-charts price series plus a sample table. */
 
-/** Table rows, newest first. */
-const HISTORY_ROWS = 24
+/** Rows the activity table asks for; the indexer caps the request. */
+const ACTIVITY_ROWS = 24
 
 let historyResolution: HistoryResolution = '1m'
 let chartPromise: Promise<PriceChart> | null = null
@@ -637,8 +702,6 @@ function ensureChart(): Promise<PriceChart> {
 
 function setupHistory(): void {
   historyPanel.hidden = false
-  setText(historyReserve0Head, record?.token0Symbol ?? 'Token 0')
-  setText(historyReserve1Head, record?.token1Symbol ?? 'Token 1')
   historyResolutionPicker.addEventListener('click', (event) => {
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
       'button[data-resolution]',
@@ -656,35 +719,26 @@ function setupHistory(): void {
 async function loadHistory(): Promise<void> {
   if (!poolIdHex) return
   try {
-    const samples = await fetchPoolHistory(CONFIG.indexerUrl, poolIdHex, historyResolution)
+    const { samples, activity, unrecorded } = await fetchPoolActivity(
+      CONFIG.indexerUrl,
+      poolIdHex,
+      historyResolution,
+      ACTIVITY_ROWS,
+    )
+    const span = sampleWindow(samples)
+    historySpan.hidden = span === null
+    if (span !== null) setText(historySpan, windowLabel(span))
     await renderHistory(samples)
+    renderActivity(activity, unrecorded)
   } catch {
+    historySpan.hidden = true
     historyNote.hidden = false
     setText(historyNote, 'Price history is unavailable right now.')
+    renderActivity([])
   }
-}
-
-/** Sample time as HH:MM, or MM-DD HH:MM at hourly resolution. */
-function formatSampleTime(timestamp: number): string {
-  const date = new Date(timestamp * 1000)
-  const hours = String(date.getHours()).padStart(2, '0')
-  const minutes = String(date.getMinutes()).padStart(2, '0')
-  // The long windows span days, so their labels carry the date.
-  if (historyResolution === '1d') {
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${month}-${day}`
-  }
-  if (historyResolution === '1h' || historyResolution === '6h') {
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    return `${month}-${day} ${hours}:${minutes}`
-  }
-  return `${hours}:${minutes}`
 }
 
 async function renderHistory(samples: IndexerSnapshot[]): Promise<void> {
-  renderHistoryTable(samples)
   const view = record
   const series =
     view === null ? [] : candles(samples, view.token0Decimals, view.token1Decimals)
@@ -697,52 +751,163 @@ async function renderHistory(samples: IndexerSnapshot[]): Promise<void> {
   if (empty) setText(historyNote, 'No price history yet.')
 }
 
-/**
- * The samples where the pool changed.
- *
- * The indexer writes a point every poll so the chart's last bucket advances,
- * and an idle pool's points all carry the time of its last change. As rows they
- * would repeat one timestamp, so the table lists changes and the chart keeps
- * every bucket.
- */
-function historyChanges(samples: IndexerSnapshot[]): IndexerSnapshot[] {
-  const changes: IndexerSnapshot[] = []
-  for (const sample of samples) {
-    const previous = changes[changes.length - 1]
-    const unchanged =
-      previous !== undefined &&
-      previous.reserve0 === sample.reserve0 &&
-      previous.reserve1 === sample.reserve1 &&
-      previous.lp_supply === sample.lp_supply
-    if (!unchanged) changes.push(sample)
-  }
-  return changes
+/** When a row happened, in UTC: the date is always there, the hour is not optional. */
+function formatSampleTime(timestamp: number): string {
+  const date = new Date(timestamp * 1000)
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  const hours = String(date.getUTCHours()).padStart(2, '0')
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0')
+  return `${month}-${day} ${hours}:${minutes}`
 }
 
-function renderHistoryTable(samples: IndexerSnapshot[]): void {
+/** Operation labels for the table's column. */
+const TRADE_KINDS: Record<string, string> = {
+  swap: 'Swap',
+  add: 'Add',
+  remove: 'Remove',
+  collect: 'Collect',
+  deploy: 'Deploy',
+  other: 'Unrecorded',
+}
+
+/** One piece of an operation cell: an amount, a unit, or a separator. */
+interface AmountSegment {
+  text: string
+  unit?: boolean
+}
+
+/**
+ * A trade's amounts as segments, so a unit prints smaller than its figure:
+ * `29.3k` then `MICO`, an arrow, then the output with its unit.
+ *
+ * The cell abbreviates for scanning and the title carries the exact figures. A
+ * side the indexer did not record prints as `?`: the table never states half a
+ * trade as a whole.
+ */
+function tradeAmounts(trade: TradeDto): { parts: Child[]; text: string; title?: string } {
+  const sides = (
+    values: [string, string],
+    format: (amount: bigint, decimals: number) => string,
+  ): AmountSegment[] => {
+    const parts: AmountSegment[] = []
+    for (const [index, value] of values.entries()) {
+      const amount = BigInt(value)
+      if (amount === 0n) continue
+      const symbol = index === 0 ? record?.token0Symbol : record?.token1Symbol
+      if (symbol === undefined) continue
+      const decimals = (index === 0 ? record?.token0Decimals : record?.token1Decimals) ?? 0
+      if (parts.length > 0) parts.push({ text: ' + ' })
+      parts.push({ text: `${format(amount, decimals)} ` }, { text: symbol, unit: true })
+    }
+    return parts
+  }
+  const unknown: AmountSegment[] = [{ text: '?' }]
+  const render = (format: (amount: bigint, decimals: number) => string): AmountSegment[] => {
+    // A creation moved nothing, so its cell is the operation alone.
+    if (trade.kind === 'deploy') return []
+    if (trade.kind === 'swap') {
+      const input = sides([trade.volume0, trade.volume1], format)
+      const output = sides([trade.out0, trade.out1], format)
+      return [
+        ...(input.length > 0 ? input : unknown),
+        { text: ' → ' },
+        ...(output.length > 0 ? output : unknown),
+      ]
+    }
+    const [first, second] =
+      trade.kind === 'remove'
+        ? [trade.out0, trade.out1]
+        : trade.kind === 'collect'
+          ? [trade.protocol_fee0, trade.protocol_fee1]
+          : [trade.in0, trade.in1]
+    const parts = sides([first, second], format)
+    return parts.length > 0 ? parts : unknown
+  }
+
+  const compact = render(compactAmount)
+  const text = compact.map((segment) => segment.text).join('')
+  const full = render(formatAmount)
+    .map((segment) => segment.text)
+    .join('')
+  const parts = compact.map((segment): Child =>
+    segment.unit === true ? el('span', { class: 'unit' }, segment.text) : segment.text,
+  )
+  if (text.includes('?')) {
+    return {
+      parts,
+      text,
+      title: trade.exact
+        ? 'The indexer recorded no amount on this side.'
+        : 'The amounts were not recorded when this row was captured; the block holds them.',
+    }
+  }
+  return { parts, text, title: full === text ? undefined : full }
+}
+
+/**
+ * The table: one row per transaction, newest first, every row the same shape.
+ *
+ * The indexer builds the rows and prices each transaction from its own amounts,
+ * so the page draws what it is given: time, block, price, operation, link. A
+ * collect moves no reserves and carries the price the pool already had.
+ */
+function renderActivity(rows: ActivityRow[], unrecorded = 0): void {
   clear(historyRows)
+  // A transaction with no amounts is not a trade and not a row: say how many
+  // were left out, so the table does not read as the pool's whole history.
+  activityNote.hidden = unrecorded === 0
+  if (unrecorded > 0) {
+    setText(
+      activityNote,
+      unrecorded === 1
+        ? '1 earlier transaction has no recorded amounts and is not listed.'
+        : `${unrecorded} earlier transactions have no recorded amounts and are not listed.`,
+    )
+  }
   const view = record
-  const changes = historyChanges(samples)
-  if (changes.length === 0 || !view) {
+  if (!view) {
     historyTable.hidden = true
     return
   }
-  historyTable.hidden = false
-  for (const sample of changes.slice(-HISTORY_ROWS).reverse()) {
-    const scaled = priceScaled(sample, view.token0Decimals, view.token1Decimals)
-    const row = el('tr')
-    row.append(
-      el('td', { class: 'mono' }, formatSampleTime(sampleTime(sample))),
-      el('td', { class: 'mono' }, String(sample.block)),
-      el('td', { class: 'mono' }, scaled === null ? '—' : formatScaled(scaled)),
-      el('td', { class: 'mono' }, formatAmount(BigInt(sample.reserve0), view.token0Decimals)),
-      el('td', { class: 'mono' }, formatAmount(BigInt(sample.reserve1), view.token1Decimals)),
-      el('td', { class: 'mono' }, formatAmount(BigInt(sample.lp_supply), 0)),
-    )
-    historyRows.append(row)
-  }
+  historyTable.hidden = rows.length === 0
+  if (rows.length === 0) return
+  historyRows.append(
+    ...rows.map((row) => {
+      const scaled =
+        row.price === undefined
+          ? null
+          : priceFromAmounts(
+              row.price.num,
+              row.price.den,
+              view.token0Decimals,
+              view.token1Decimals,
+            )
+      const amounts = tradeAmounts(row.trade)
+      const txId = row.trade.tx_id
+      const txUrl = explorerTxUrl(CONFIG.explorerUrl, txId)
+      return el(
+        'tr',
+        {},
+        el('td', { class: 'mono' }, formatSampleTime(row.timestamp)),
+        el('td', { class: 'mono' }, String(row.block)),
+        el('td', { class: 'mono' }, scaled === null ? '—' : formatScaled(scaled)),
+        el(
+          'td',
+          { title: amounts.title },
+          ...(amounts.parts.length === 0
+            ? [TRADE_KINDS[row.trade.kind] ?? row.trade.kind]
+            : [`${TRADE_KINDS[row.trade.kind] ?? row.trade.kind} `, ...amounts.parts]),
+        ),
+        el(
+          'td',
+          { class: 'mono' },
+          el('a', { href: txUrl, target: '_blank', rel: 'noreferrer', title: txId }, shortHex(txId)),
+        ),
+      )
+    }),
+  )
 }
-
 
 /** The port0 module, if already loaded. Null when quotes have never run. */
 let loadedXykModule: XykModule | null = null
@@ -780,7 +945,7 @@ function populateSwapSide(): void {
 /** The pool's two tokens, as the shared token autocomplete wants them. */
 function swapSideSource(): TokenSource {
   if (!currentState || !record) {
-    return { entries: [], emptyNote: 'Loading the pool…' }
+    return { entries: [], emptyNote: 'Loading the pool …' }
   }
   return {
     entries: [
@@ -830,6 +995,9 @@ function setupTabs(): void {
         link.classList.toggle('active', name === tab)
       }
     }
+    // The loss disclosure belongs to the action, not to the quote: it is shown
+    // whenever the add tab is open.
+    addRisk.hidden = tab !== 'add'
   }
   window.addEventListener('hashchange', apply)
   apply()
@@ -1108,6 +1276,23 @@ function renderSwapQuote(): void {
         ),
       )
     }
+    const tokenInFaucet = side === 0 ? record.token0FaucetId : record.token1FaucetId
+    const noteFee = 126n
+    if (
+      record.feeFaucetId.length > 0 &&
+      tokenInFaucet.toLowerCase() === record.feeFaucetId.toLowerCase() &&
+      amountIn + noteFee > balanceOf(tokenInFaucet)
+    ) {
+      formErrors.swap = true
+      lines.push(
+        el(
+          'p',
+          { class: 'error' },
+          `Keep ${formatAmount(noteFee, decimalsIn)} ${symbolIn} back for the network note fee, ` +
+            'or the transaction cannot be emitted.',
+        ),
+      )
+    }
     swapQuote.append(...lines)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -1178,7 +1363,9 @@ function renderAddQuote(): void {
     ]
 
     // The share of the pool this deposit buys, so a creator sees what they own.
-    const totalAfter = state.lpSupply + quote.liquidityToUser
+    // The pool's supply after the mint includes the locked minimum on the first
+    // deposit; using the quote's own total is the only share that matches it.
+    const totalAfter = quote.lpSupplyAfter
     const shareBps = totalAfter > 0n ? (quote.liquidityToUser * 10000n) / totalAfter : 0n
     lines.push(el('p', {}, `Your share of the pool after this deposit: ${formatBps(shareBps)}`))
 
@@ -1223,14 +1410,16 @@ function renderAddQuote(): void {
       )
     }
 
-    lines.push(
-      el(
-        'p',
-        { class: 'il-notice' },
-        "Providing liquidity carries impermanent loss risk: a position's value can fall below the value of " +
-          'holding the same tokens, and fees are not guaranteed to offset it.',
-      ),
-    )
+    if (slippageBps > 500n) {
+      lines.push(
+        el(
+          'p',
+          { class: 'error slippage-warning' },
+          `Slippage ${formatBps(slippageBps)} is high: this deposit can spend far more than the quote, ` +
+            'and the excess is refunded to you.',
+        ),
+      )
+    }
     addQuote.append(...lines)
   } catch (error) {
     addQuote.append(quoteError(error instanceof Error ? error.message : String(error), 'add'))
@@ -1280,6 +1469,15 @@ function renderRemoveQuote(): void {
         `${formatAmount(min1, record.token1Decimals)} ${record.token1Symbol}`,
       ),
     )
+    if (slippageBps > 500n) {
+      removeQuote.append(
+        el(
+          'p',
+          { class: 'error slippage-warning' },
+          `Slippage ${formatBps(slippageBps)} is high: this withdrawal can pay far less than the quote.`,
+        ),
+      )
+    }
   } catch (error) {
     removeQuote.append(quoteError(error instanceof Error ? error.message : String(error), 'remove'))
   } finally {
@@ -1294,37 +1492,215 @@ function renderRemoveQuote(): void {
  * so the user reads the reason instead of signing a transaction that reverts.
  */
 const formErrors = { swap: false, add: false, remove: false }
+/** `null` until the registry read completes; `false` means the pool is not listed. */
+let listed: boolean | null = null
+/** A verification read failed, so `listed` is unknown rather than negative. */
+let listingUnverified = false
+/** This pool belongs to a legacy registry: withdraw only. */
+let legacyMode = false
+/** The pool has no liquidity providers outside the locked minimum. */
+let seedOnlyMode = false
+/**
+ * The LP the pool locks on its first deposit and never releases.
+ *
+ * A supply at or below it means no provider holds a share, so the ratio is not
+ * a market price. The figure changes while a page is open: the first deposit is
+ * the whole point of opening it.
+ */
+const MINIMUM_LP_SUPPLY = 1000n
+/** A submitted transaction whose confirmation timed out; blocks a resubmit. */
+let heldTx: string | null = null
+
+/**
+ * Token decimals drive every parsed amount. The indexer supplies them for the
+ * list, but the faucet account is the authority, so the pool page overrides
+ * them from chain and refuses to trade if the read fails.
+ */
+async function verifyTokenMeta(): Promise<void> {
+  if (!record) return
+  try {
+    // Read the token config with the proof RPC: importing each faucet account to
+    // read one value slot builds its storage in WASM on the main thread.
+    const [rpc, { readFaucetMetadata, parseAccountId }] = await Promise.all([
+      getRpc(),
+      xykModule(),
+    ])
+    const [meta0, meta1] = await Promise.all([
+      readFaucetMetadata(rpc, parseAccountId(withHexPrefix(record.token0FaucetId))),
+      readFaucetMetadata(rpc, parseAccountId(withHexPrefix(record.token1FaucetId))),
+    ])
+    record.token0Decimals = meta0.decimals
+    record.token1Decimals = meta1.decimals
+    record.token0Symbol = meta0.symbol
+    record.token1Symbol = meta1.symbol
+    setText(pairTitle, `${record.token0Symbol} / ${record.token1Symbol}`)
+    renderSummary()
+    renderSwapQuote()
+    renderAddQuote()
+    renderRemoveQuote()
+  } catch {
+    toast('Could not verify token metadata on chain; trading is disabled.', 'error', 12000)
+    listingUnverified = true
+  }
+  renderWalletGating()
+}
+
+/** Whether this pool belongs to one of the legacy registries. */
+async function poolIsLegacy(): Promise<boolean> {
+  if (CONFIG.legacyRegistryIds.length === 0) return false
+  try {
+    const client = await getClient()
+    const { AccountId } = await sdkModule()
+    for (const registryId of CONFIG.legacyRegistryIds) {
+      await getPublicAccount(registryId)
+      const entries = await readRegistryPools(
+        (id) => client.accounts.get(id),
+        AccountId.fromHex(registryId),
+      )
+      if (entries.some((entry) => normalizeHex(entry.poolId.toString()) === poolIdHex)) {
+        return true
+      }
+    }
+  } catch {
+    return false
+  }
+  return false
+}
+
+/**
+ * A pool from an earlier contract version. Its state is read from chain, the
+ * page keeps only the withdrawal form, and the note comes from the frozen SDK
+ * that produced the pool.
+ */
+async function bootLegacy(): Promise<void> {
+  try {
+    const client = await getClient()
+    const { AccountId, BasicFungibleFaucetComponent } = await sdkModule()
+    await getPublicAccount(poolIdHex!)
+    const state = await fetchPoolState(
+      (id) => client.accounts.get(id),
+      AccountId.fromHex(withHexPrefix(poolIdHex!)),
+    )
+    const metaOf = async (faucetId: string) =>
+      BasicFungibleFaucetComponent.fromAccount(await getPublicAccount(faucetId))
+    const [m0, m1] = await Promise.all([
+      metaOf(state.token0FaucetId.toString()),
+      metaOf(state.token1FaucetId.toString()),
+    ])
+    record = {
+      poolId: poolIdHex!,
+      token0FaucetId: state.token0FaucetId.toString(),
+      token1FaucetId: state.token1FaucetId.toString(),
+      token0Symbol: m0.symbol().toString(),
+      token1Symbol: m1.symbol().toString(),
+      token0Decimals: m0.decimals(),
+      token1Decimals: m1.decimals(),
+      feeFaucetId: CONFIG.chainFeeFaucetId,
+      noteFees: {},
+    }
+    currentState = state
+    indexedPool = null
+    legacyMode = true
+    listed = true
+    setText(pairTitle, `${record.token0Symbol} / ${record.token1Symbol}`)
+    setText(
+      poolTokensLine,
+      `${record.token0Symbol} ${shortHex(record.token0FaucetId)} · ${record.token1Symbol} ${shortHex(record.token1FaucetId)}`,
+    )
+    poolTokensLine.hidden = false
+    poolTokensLine.setAttribute('title', `${record.token0FaucetId}\n${record.token1FaucetId}`)
+    setText(poolIdLine, poolIdHex!)
+    poolIdLine.setAttribute('title', poolIdHex!)
+    poolStats.hidden = true
+    historyPanel.hidden = true
+    window.location.hash = 'remove'
+    // Legacy withdrawals take the fair share at execution; the bound is the
+    // widest the form allows and is not a user choice.
+    removeSlippage.value = '99.99'
+    removeSlippage.hidden = true
+    qs<HTMLElement>(document, 'label[for="remove-slippage"]').hidden = true
+    for (const tab of ['swap', 'add']) {
+      document.querySelector(`a[data-tab="${tab}"]`)?.setAttribute('hidden', '')
+      qs<HTMLElement>(document, `#tab-${tab}`).hidden = true
+    }
+    qs<HTMLElement>(document, '#tab-remove').hidden = false
+    setupForms()
+    renderSummary()
+    renderWalletGating()
+    showLoadedPage()
+    toast('Legacy pool. Withdrawals only.', 'error', 12000)
+  } catch (error) {
+    showPoolError(error instanceof Error ? error.message : String(error))
+  }
+}
+
+async function verifyListing(): Promise<void> {
+  try {
+    const ids = await listedPools([poolIdHex!])
+    listed = ids.has(poolIdHex!)
+    listingUnverified = false
+  } catch (error) {
+    // An unreadable registry is not a negative answer: say so instead of
+    // claiming the pool is not listed.
+    console.error('[pool] registry listing read failed', error)
+    listingUnverified = true
+    listed = null
+  }
+  renderWalletGating()
+}
+
+/**
+ * Waits for a submitted transaction, but never lets a slow wallet turn into a
+ * second submit. On timeout the tx id is kept and every form stays blocked until
+ * a reload, because the first transaction may still land.
+ */
+async function waitOrHold(txId: string, status: HTMLElement): Promise<boolean> {
+  const timeout = new Promise<'timeout'>((resolve) => {
+    window.setTimeout(() => resolve('timeout'), 20_000)
+  })
+  const settled = await Promise.race([
+    waitForTransaction(txId).then(() => 'confirmed' as const, (error: unknown) => {
+      throw error
+    }),
+    timeout,
+  ])
+  if (settled === 'timeout') {
+    heldTx = txId
+    setText(status, `Submitted ${shortHex(txId)}; confirmation delayed. Do not resubmit: check your wallet, then reload.`)
+    toast(`Submitted ${shortHex(txId)}; the wallet has not confirmed it yet. Do not resubmit.`, 'error', 20000)
+    renderWalletGating()
+    return false
+  }
+  return true
+}
 
 function renderWalletGating(): void {
-  const connected = walletStore.get().connected
-  const hasFees = (record?.feeFaucetId ?? '').length > 0
-  const enabled = connected && hasFees
-
-  const buttons: Array<[HTMLButtonElement, keyof typeof formErrors]> = [
+  const state: GateState = {
+    connected: walletStore.get().connected,
+    hasFees: (record?.feeFaucetId ?? '').length > 0,
+    listed,
+    unverified: listingUnverified,
+    legacy: legacyMode,
+    seedOnly: seedOnlyMode,
+    tradingEnabled: CONFIG.tradingEnabled,
+    pendingTx: heldTx !== null,
+    formError: false,
+  }
+  const buttons: Array<[HTMLButtonElement, PoolAction]> = [
     [swapSubmit, 'swap'],
     [addSubmit, 'add'],
     [removeSubmit, 'remove'],
   ]
-  for (const [button, form] of buttons) {
-    const blocked = !enabled || formErrors[form]
-    button.disabled = blocked
-    button.textContent = !enabled
-      ? connected
-        ? 'Trading disabled'
-        : 'Connect wallet to act'
-      : formErrors[form]
-        ? 'Fix the amount first'
-        : 'Submit'
+  for (const [button, action] of buttons) {
+    const { disabled, label } = actionState({ ...state, formError: formErrors[action] }, action)
+    button.disabled = disabled
+    button.textContent = label
   }
 
-  // One gate line above the tabs. Shown only when an action is blocked:
-  // not connected, or the pool has no fee faucet and cannot price notes.
-  const gate = !connected
-    ? 'Login to act on this pool.'
-    : !hasFees
-      ? 'Trading is disabled for this pool: it was imported without its fee faucet id.'
-      : ''
+  // One gate line above the tabs. Shown only when an action is blocked.
+  const gate = gateMessage(state)
   poolGate.hidden = gate === ''
+  poolGate.classList.toggle('unsupported', legacyMode)
   setText(poolGate, gate)
 }
 
@@ -1333,13 +1709,6 @@ async function senderAccountId(): Promise<AccountId> {
   const id = await walletAccountId()
   if (!id) throw new Error('Login first.')
   return id
-}
-
-function computeDeadline(): bigint {
-  const wallClock = BigInt(Math.floor(Date.now() / 1000))
-  const chainFloor = currentState?.blockTimestampLast ?? 0n
-  const latest = wallClock > chainFloor ? wallClock : chainFloor
-  return latest + DEADLINE_MARGIN_SECONDS
 }
 
 async function poolHandle(): Promise<Pool> {
@@ -1377,8 +1746,8 @@ function refreshBeforeAction(): Promise<PoolState> {
       sdkModule(),
       getClient(),
     ])
-    const account = await getFreshAccount(AccountId.fromHex(withHexPrefix(poolIdHex as string)))
     await client.syncChain()
+    const account = await getFreshAccount(AccountId.fromHex(withHexPrefix(poolIdHex as string)))
     currentState = decodePoolState(account)
     renderSummary()
     return currentState
@@ -1386,6 +1755,14 @@ function refreshBeforeAction(): Promise<PoolState> {
 }
 
 async function doSwap(): Promise<void> {
+  if (legacyMode) {
+    toast('Legacy pool. Withdrawals only.', 'error')
+    return
+  }
+  if (seedOnlyMode) {
+    toast('No liquidity providers yet. Add liquidity to set this pool\'s price.', 'error')
+    return
+  }
   if (!swapSide.value) {
     toast('Pick the token to pay.', 'error')
     return
@@ -1406,13 +1783,16 @@ async function doSwap(): Promise<void> {
       tokenIn,
       amountIn: parseAmount(swapAmount.value, decimalsIn),
       slippageBps: slippageInput(swapSlippage),
-      deadline: computeDeadline(),
+      // Spot: the pool fills or refunds in the same attempt. Nothing is left
+      // pending and the sender never has to reclaim.
+      deadline: 0n,
     })
     const txId = await submitViaWallet(output.request)
     setText(swapStatus, `Submitted ${shortHex(txId)}; confirming…`)
+    if (!(await waitOrHold(txId, swapStatus))) return
     const { txHash } = await waitForTransaction(txId)
     playArrivalBell()
-    toast(`Swap confirmed: ${shortHex(txHash)}`)
+    toast(`Swap settled: ${shortHex(txHash)}`)
     watchUntilChanged(before, swapStatus)
   } catch (error) {
     toast(error instanceof Error ? error.message : String(error), 'error')
@@ -1423,6 +1803,10 @@ async function doSwap(): Promise<void> {
 }
 
 async function doAdd(): Promise<void> {
+  if (legacyMode) {
+    toast('Legacy pool. Withdrawals only.', 'error')
+    return
+  }
   const sender = await senderAccountId()
   setBusy(addSubmit, addStatus, 'Submitting…')
   try {
@@ -1434,10 +1818,12 @@ async function doAdd(): Promise<void> {
       amount0: parseAmount(addAmount0.value, record!.token0Decimals),
       amount1: parseAmount(addAmount1.value, record!.token1Decimals),
       slippageBps: slippageInput(addSlippage),
-      deadline: computeDeadline(),
+      // Spot: a deposit that cannot mint is refunded as a note.
+      deadline: 0n,
     })
     const txId = await submitViaWallet(output.request)
     setText(addStatus, `Submitted ${shortHex(txId)}; confirming…`)
+    if (!(await waitOrHold(txId, addStatus))) return
     const { txHash } = await waitForTransaction(txId)
     toast(`Deposit confirmed: ${shortHex(txHash)}`)
     watchUntilChanged(before, addStatus)
@@ -1455,15 +1841,40 @@ async function doRemove(): Promise<void> {
   try {
     await syncWallet()
     const before = await refreshBeforeAction()
-    const output = await (await poolHandle()).removeLiquidity({
-      sender,
-      recipient: sender,
-      amountLp: parseAmount(removeLp.value, 0),
-      slippageBps: slippageInput(removeSlippage),
-      deadline: computeDeadline(),
-    })
-    const txId = await submitViaWallet(output.request)
+    let request: Parameters<typeof submitViaWallet>[0]
+    if (legacyMode) {
+      const client = await getClient()
+      const { AccountId } = await sdkModule()
+      await getPublicAccount(poolIdHex!)
+      const legacy = await import('@port0.sh/sdk-legacy')
+      const handle = legacy.XykClient.from(client).pool({
+        poolId: AccountId.fromHex(withHexPrefix(poolIdHex!)),
+        feeFaucetId: AccountId.fromHex(CONFIG.chainFeeFaucetId),
+        noteFees: legacy.NOTE_FEES,
+      })
+      const output = await handle.removeLiquidity({
+        sender,
+        recipient: sender,
+        amountLp: parseAmount(removeLp.value, 0),
+        slippageBps: slippageInput(removeSlippage),
+        // The old note has a deadline assertion, so it cannot be a spot zero.
+        deadline: BigInt(Math.floor(Date.now() / 1000) + 3_600),
+      })
+      request = output.request
+    } else {
+      const output = await (await poolHandle()).removeLiquidity({
+        sender,
+        recipient: sender,
+        amountLp: parseAmount(removeLp.value, 0),
+        slippageBps: slippageInput(removeSlippage),
+        // Spot: a withdrawal that cannot meet its minimums is refunded as a note.
+        deadline: 0n,
+      })
+      request = output.request
+    }
+    const txId = await submitViaWallet(request)
     setText(removeStatus, `Submitted ${shortHex(txId)}; confirming…`)
+    if (!(await waitOrHold(txId, removeStatus))) return
     const { txHash } = await waitForTransaction(txId)
     toast(`Withdrawal confirmed: ${shortHex(txHash)}`)
     watchUntilChanged(before, removeStatus)

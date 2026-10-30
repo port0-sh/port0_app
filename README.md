@@ -46,6 +46,19 @@ destination, share, allowed LP tiers, and register price from it. `VITE_INDEXER_
 names the pool source. Both are required for a usable deployment; the app degrades
 to "no pools" without the indexer.
 
+`VITE_LEGACY_REGISTRY_IDS` is a comma-separated list of earlier registries. Their
+pools are read directly from the chain and appended to the same pool table,
+tagged `Unsupported`, dimmed, excluded from the stats and the router, and
+withdraw-only through the frozen SDK that produced their notes
+(`@port0.sh/sdk-legacy`, pinned to the published version). A switch in the table
+hides them. When a registry is replaced, move its id from `VITE_REGISTRY_ID` into
+this list.
+
+`/debug.html` is an unlinked, noindex wallet edge-case page: sync and height,
+send with recall, wallet notes, and faulty swaps, deposits and withdrawals that
+the pool must refund. It is built on testnet, devnet and localnet, omitted from
+the mainnet build, and linked from nowhere.
+
 ## Pages
 
 | Page | Path | Contents |
@@ -56,6 +69,7 @@ to "no pools" without the indexer.
 | Utils | `/utils.html` | Token launch, registry fee, public note |
 | About | `/about.html` | |
 | Media | `/media.html` | |
+| Debug | `/debug.html` | Wallet edge cases (unlinked, noindex) |
 
 ## Architecture
 
@@ -147,7 +161,7 @@ The protocol's share is carved out of that fee, not added to it, so the swapper 
 the tier and the output does not depend on the share.
 
 Network note fees are denominated in the chain's fee asset and priced per note kind:
-126 base units for the four pool notes, 119 for the registry notes and a token
+126 base units for the four pool notes and the registry notes, 119 for a token
 launch, 0 for the registry config note. A pool and the registry reserve the measured
 collect fee out of the fee asset so a sweep can pay its own transaction.
 

@@ -34,6 +34,11 @@ interface NetworkDefaults {
   chainId: 'testnet' | 'devnet' | 'mainnet' | 'custom'
   /** Prefix used when `chainId` is `custom`. */
   chainPrefix?: string
+  /**
+   * Dollar-pegged assets counted at par with the fee asset in the totals, by
+   * faucet id. Symbols are not used: any faucet can call itself USDT.
+   */
+  trustedTokens: string[]
   /** True when real funds are at stake: gates the blocking risk notice. */
   realFunds: boolean
 }
@@ -46,6 +51,7 @@ const NETWORKS: Record<NetworkName, NetworkDefaults> = {
     noteTransportUrl: 'testnet',
     explorerUrl: 'https://testnet.midenscan.com/account',
     chainId: 'testnet',
+    trustedTokens: [],
     realFunds: false,
   },
   devnet: {
@@ -55,6 +61,7 @@ const NETWORKS: Record<NetworkName, NetworkDefaults> = {
     noteTransportUrl: 'devnet',
     explorerUrl: 'https://explorer.devnet.miden.io/account',
     chainId: 'devnet',
+    trustedTokens: [],
     realFunds: false,
   },
   localnet: {
@@ -65,6 +72,7 @@ const NETWORKS: Record<NetworkName, NetworkDefaults> = {
     explorerUrl: '',
     chainId: 'custom',
     chainPrefix: 'mlcl',
+    trustedTokens: [],
     realFunds: false,
   },
   mainnet: {
@@ -74,6 +82,11 @@ const NETWORKS: Record<NetworkName, NetworkDefaults> = {
     noteTransportUrl: 'https://transport.cedar.miden.io',
     explorerUrl: 'https://explorer.cedar.miden.io/account',
     chainId: 'mainnet',
+    // Bridged dollars, from the Miden bridge's own token config for mainnet.
+    trustedTokens: [
+      '0x5cb79d29507d3ad17bb6dc60279e89', // USDT
+      '0xeb4266c94493b091380b25349fddd3', // PYUSD
+    ],
     realFunds: true,
   },
 }
@@ -161,12 +174,38 @@ export const CONFIG = {
    * note after the pool is deployed. Empty disables registration.
    */
   registryId: import.meta.env.VITE_REGISTRY_ID?.trim() ?? '',
+  /** Registries from earlier contract versions, presented as withdraw-only. */
+  legacyRegistryIds: (import.meta.env.VITE_LEGACY_REGISTRY_IDS ?? '')
+    .split(',')
+    .map((id: string) => id.trim())
+    .filter((id: string) => id.length > 0),
 
   /**
    * Register note consumption fee, in the registry's fee asset (the chain fee
    * asset). Must match the registry's note fee schedule. Decimal string.
    */
 
+
+  /**
+   * Whether the app may build transactions that spend user assets. Off unless
+   * `VITE_TRADING_ENABLED=1`, so a defect in a notepath can be stopped by a
+   * configuration change rather than a rebuild of every page.
+   */
+  tradingEnabled: import.meta.env.VITE_TRADING_ENABLED === '1',
+
+  /**
+   * Assets counted at par with the fee asset in the protocol totals: the fee
+   * asset itself plus every configured dollar. `VITE_TRUSTED_TOKENS` replaces the
+   * network's list when set.
+   */
+  trustedTokens: (() => {
+    const extra = (import.meta.env.VITE_TRUSTED_TOKENS ?? '')
+      .split(',')
+      .map((id: string) => id.trim().toLowerCase())
+      .filter((id: string) => id.length > 0)
+    const list = extra.length > 0 ? extra : DEFAULTS.trustedTokens
+    return [DEFAULTS.chainFeeFaucetId.toLowerCase(), ...list.map((id: string) => id.toLowerCase())]
+  })(),
 
   /**
    * Pool ids the list shows first, in this order, then everything else. For

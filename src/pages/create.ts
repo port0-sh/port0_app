@@ -19,9 +19,9 @@ import {
 import { CONFIG } from '../lib/config'
 import { chainNetworkId } from '../lib/network'
 import { qs, setText } from '../lib/dom'
-import { DEFAULT_LP_FEE_BPS, POOL_DEPLOY_FEE_BASE_UNITS } from '../lib/fees'
+import { DEFAULT_LP_FEE_BPS, POOL_DEPLOY_FEE_BASE_UNITS, launchCostLine } from '../lib/fees'
 import type { RegistryFeePolicy } from '@port0.sh/sdk'
-import { feeSplit, formatAmount, formatBps, isHexId, shortHex, withHexPrefix } from '../lib/format'
+import { feeSplit, formatBps, isHexId, shortHex, withHexPrefix } from '../lib/format'
 
 import { mountSite } from '../lib/site'
 import { toast } from '../ui/toast'
@@ -139,10 +139,19 @@ const STAGE_LABELS: Record<Stage, string> = {
 
 let flow: FlowState | null = null
 let flowStage: Stage = 'account'
+/** The last stage may have landed despite the error; retry stays locked. */
+let submissionUnknown = false
+/** A wallet transaction was submitted for the current stage. */
+let stageSubmitted = false
 
 /** Shows the retry and restart controls for the stage that failed. */
 function showStageRetry(): void {
   if (!flow) {
+    retryButton.hidden = true
+    restartButton.hidden = true
+    return
+  }
+  if (submissionUnknown) {
     retryButton.hidden = true
     restartButton.hidden = true
     return
@@ -241,9 +250,7 @@ async function renderLaunchCost(): Promise<void> {
     const [registerFee, asset] = await Promise.all([loadRegisterFee(), feeAsset()])
     setText(
       launchCost,
-      `Creating this pool costs ${formatAmount(registerFee, asset.decimals)} ${asset.symbol} in ` +
-        `registry fees, plus ${formatAmount(BigInt(POOL_FUNDING_AMOUNT), asset.decimals)} ${asset.symbol} ` +
-        'sent to the pool to pay its first transaction. Both come out of your wallet.',
+      launchCostLine(registerFee, BigInt(POOL_FUNDING_AMOUNT), asset.decimals, asset.symbol),
     )
   } catch (error) {
     console.warn('launch cost unavailable', error)
@@ -501,11 +508,14 @@ async function run(): Promise<void> {
           AccountInterface.BasicWallet,
         )
         setStep(stepDeploy, 'active', 'requesting pool funding from wallet…')
+        // Plain P2ID: the pool's auth allowlists P2ID and not P2IDE.
         const poolSendTxId = await sendViaWallet(
           poolAddress,
           CONFIG.chainFeeFaucetId,
           POOL_FUNDING_AMOUNT,
+          { recall: false },
         )
+        stageSubmitted = true
         await waitForTransaction(poolSendTxId)
         setStep(stepDeploy, 'active', 'waiting for funding note in sync…')
         poolNoteId = await waitForFundingNote(client, poolId.toString())
@@ -514,6 +524,7 @@ async function run(): Promise<void> {
         throw new Error('Pool funding note not found within the sync window.')
       }
       setStep(stepDeploy, 'active', 'consuming note (creates pool on-chain)…')
+      stageSubmitted = true
       await xyk.deployPoolAccount(poolId, poolNoteId, { waitForConfirmation: true })
       setStep(stepDeploy, 'done', 'committed on-chain')
       flowStage = 'register'
@@ -550,7 +561,14 @@ async function run(): Promise<void> {
   } catch (error) {
     console.error('[create-pool]', error)
     const message = error instanceof Error ? error.message : String(error)
-    showDeployError(message)
+    // Any failure after a submission may have landed; lock the retry. A
+    // pre-submission failure (quote, validation, build) is safe to retry.
+    if (stageSubmitted) submissionUnknown = true
+    showDeployError(
+      submissionUnknown
+        ? `${message} The last step may still land: check your wallet, then reload before retrying.`
+        : message,
+    )
     toast(message, 'error')
     showStageRetry()
   } finally {
@@ -666,6 +684,7 @@ async function registerPoolOnRegistry(params: {
     },
   )
   const registerTxId = await submitViaWallet(registerResult.request)
+  stageSubmitted = true
   setStep(stepRegister, 'active', `submitted ${shortHex(registerTxId)}; registering…`)
   const { txHash } = await waitForTransaction(registerTxId)
   setStep(stepRegister, 'done', `emitted (${shortHex(txHash)})`)

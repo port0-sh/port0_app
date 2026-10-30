@@ -13,12 +13,14 @@
 
 import { settleBannerFont } from './brand'
 import { CONFIG } from './config'
+import { APP_VERSION, SDK_VERSION } from './version'
 import { el } from './dom'
 import { playArrivalBell, setSoundEnabled, soundEnabled } from './sound'
 
 export function mountSite(): void {
   settleBannerFont()
   setFooterYear()
+  setFooterVersion()
   mountNotice()
   mountSoundToggle()
 }
@@ -51,6 +53,24 @@ function mountSoundToggle(): void {
 function setFooterYear(): void {
   const year = document.getElementById('footer-year')
   if (year) year.textContent = String(new Date().getFullYear())
+}
+
+/**
+ * The build identity in the footer: app and SDK versions, with the network and
+ * registry in the title. A screenshot then names the build it came from.
+ */
+function setFooterVersion(): void {
+  const footer = document.querySelector('footer.footer')
+  if (!footer) return
+  let node = document.getElementById('footer-version')
+  if (!node) {
+    node = document.createElement('span')
+    node.id = 'footer-version'
+    node.className = 'muted'
+    footer.append(node)
+  }
+  node.textContent = `app v${APP_VERSION} · sdk v${SDK_VERSION}`
+  node.setAttribute('title', `${CONFIG.network} · registry ${CONFIG.registryId}`)
 }
 
 /** Acknowledgement key for the alpha notice, one per network. */

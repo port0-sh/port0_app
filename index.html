@@ -68,7 +68,7 @@
   <main class="container">
     <div id="site-banner" hidden></div>
 
-    <h1 id="brand-heading">%VITE_BRAND_NAME%</h1>
+    <h1 id="brand-heading"><span class="brand-logo">%VITE_BRAND_NAME%<span class="brand-badge" aria-hidden="true">testnet</span></span></h1>
 
     <div class="hero-cta">
       <a class="btn" href="/create.html">Launch a pool</a>
@@ -187,6 +187,9 @@
         </div>
 
         <div class="form-actions swap-actions">
+          <p class="hint error" id="swap-paused" hidden>
+            Trading is down for maintenance.
+          </p>
           <button type="submit" class="btn btn-primary swap-submit" id="route-submit">Swap</button>
           <div class="muted flow-status" id="route-status"></div>
         </div>
@@ -227,22 +230,26 @@
           <input
             id="pool-filter"
             type="search"
-            placeholder="filter by faucet id"
+            placeholder="Token symbol or id ..."
             spellcheck="false"
-            aria-label="Filter pools by token faucet id"
+            aria-label="Search pools by token symbol or id"
           />
-          <span class="muted" id="pool-count">Loading pools…</span>
+          <label class="muted legacy-toggle" title="Pools from earlier contract versions">
+            <input type="checkbox" id="show-legacy" /> Show legacy pools
+          </label>
         </span>
         <span class="toolbar-actions">
           <span class="muted mono" id="refresh-status"></span>
           <button type="button" class="btn" id="refresh-states">Refresh</button>
         </span>
       </div>
-      <div id="pool-table" class="table-wrap">Loading…</div>
+      <div class="loader-host" id="table-loader" data-loader-state="pools" data-loader-detail="Reading the pools from the indexer..."></div>
+      <div id="pool-table" class="table-wrap"></div>
       <div class="table-pager">
         <button type="button" class="btn" id="page-prev">← Prev</button>
         <span class="muted" id="page-status"></span>
         <button type="button" class="btn" id="page-next">Next →</button>
+        <span class="muted" id="pool-count"></span>
         <label class="muted pager-size" for="page-size">
           Per page
           <select id="page-size">

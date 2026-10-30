@@ -230,6 +230,7 @@ a:active {
   align-items: center;
   gap: 1ch;
   justify-self: start;
+  position: relative;
   color: var(--white);
   text-decoration: none;
 }
@@ -240,12 +241,48 @@ a:active {
 
 /* The header mark is mark.svg, sized by height. Its viewBox is the ink's
    bounds, so the height is the visible height and the width follows the
-   280.41:146.51 ratio; nothing is cropped and no wrapper is involved. */
+   280.41:146.51 ratio; nothing is cropped. The wrapper exists only to anchor
+   the network badge to the mark's bottom-right corner. */
+.brand-logo {
+  position: relative;
+  display: inline-block;
+}
+
 .brand-mark {
   display: block;
   height: 1.25rem;
   width: auto;
   flex: none;
+}
+
+/* Network badge: a testnet build marks the logo so no screenshot of it can be
+   read as mainnet. It is a caption under the logo's right end: no box, light
+   grey on the page. The head script sets `data-network` before first paint, so
+   the badge is present or absent when the page first paints. `aria-hidden`
+   keeps the accessible name of the link and of the heading unchanged. */
+.brand-badge {
+  display: none;
+  position: absolute;
+  right: 0.32em;
+  bottom: -1.3em;
+  width: max-content;
+  white-space: nowrap;
+  color: var(--light-grey);
+  font-size: 0.7em;
+  font-weight: bold;
+  line-height: 1;
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+
+html[data-network='testnet'] .brand-badge {
+  display: block;
+}
+
+/* The index logo is the wordmark heading, set at 72 px: an em-relative size
+   would scale the caption with the heading, so it keeps its own. */
+#brand-heading .brand-badge {
+  font-size: 0.8rem;
 }
 
 .brand-name {
@@ -280,10 +317,34 @@ a:active {
 }
 
 .footer {
-  margin-top: 3rem;
-  padding: 1rem 2ch 2rem;
+  /* The footer follows the page wrapper, not the viewport. */
+  max-width: 90ch;
+  margin: 3rem auto 0;
+  padding: 1rem 1ch 3rem;
   text-align: center;
   color: var(--dark-grey);
+}
+
+.footer .legal-line {
+  display: block;
+  margin-top: 0.35rem;
+}
+
+.footer .legal-line,
+.footer .legal-line a {
+  color: #ffffff;
+}
+
+#footer-version {
+  display: block;
+  margin-top: 0.35rem;
+  text-align: center;
+  color: #4a4a4a;
+  font-size: 0.85em;
+}
+
+#refresh-states {
+  min-width: 9ch;
 }
 
 /* Panels */
@@ -475,6 +536,12 @@ button:disabled {
 .form-grid .hint {
   grid-column: 1 / -1;
   font-size: 0.9em;
+}
+
+/* The launch cost is a footnote to the button: three amounts and their total,
+   one step below body text. */
+.launch-cost {
+  font-size: 0.85em;
 }
 
 /* A select of the wallet's tokens, or the same field typed by hand. */
@@ -805,36 +872,27 @@ dialog.modal::backdrop {
 
 .boot {
   display: flex;
-  gap: 1.5ch;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 0.85rem;
   border: 1px solid var(--dark-green);
   padding: 1rem 1.5ch;
   background-color: var(--darkest-green);
 }
 
-.boot-glyph {
-  color: var(--green);
-  font-size: 1.4em;
-  line-height: 1.2;
-  min-width: 1.6ch;
-  text-align: center;
+.boot-scan {
+  width: 100%;
 }
+
 
 .boot-copy {
   min-width: 0;
 }
 
-.boot-title {
-  margin: 0 0 0.35rem;
-  color: var(--green);
-  font-size: 0.85em;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
+/* The grey line under the boot loader, centred like the index's. */
 .boot-detail {
-  margin: 0;
+  margin: 0 auto;
   max-width: 68ch;
+  text-align: center;
 }
 
 /* History: SVG price line plus a samples table. */
@@ -867,6 +925,20 @@ dialog.modal::backdrop {
 .chip.is-active {
   border-color: var(--green);
   color: var(--green);
+}
+
+/*
+ * A unit in an operation cell prints one step smaller than its figure, so a cell
+ * of amounts reads as numbers with their names rather than as a wall of type.
+ */
+.table .unit {
+  font-size: 0.85em;
+}
+
+/* The range caption beside the history buttons names the window they select. */
+.history-span {
+  align-self: center;
+  font-size: 0.85rem;
 }
 
 /* The chart library sizes its canvas to the container box. */
@@ -1920,4 +1992,49 @@ dialog.alpha-gate li {
   margin: 0.5rem 0 0;
   color: var(--light-grey);
   font-size: 0.95em;
+}
+
+/* Inside the add form the disclosure is a grid child, below the quote box. */
+.form-grid .il-notice {
+  grid-column: 1 / -1;
+}
+
+/* A legacy pool is not disabled: full contrast, marked structurally. */
+.legacy-row {
+  background: rgba(242, 0, 185, 0.03);
+  box-shadow: inset 2px 0 0 var(--purple);
+}
+
+.legacy-row:hover {
+  background: rgba(242, 0, 185, 0.06);
+}
+
+.badge {
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--purple);
+  border-radius: 2px;
+  color: var(--purple);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  vertical-align: middle;
+}
+
+.legacy-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-right: 0.75rem;
+}
+
+#pool-gate.unsupported {
+  color: var(--purple);
+}
+
+.badge-muted {
+  border-color: currentColor;
+  color: var(--muted);
 }

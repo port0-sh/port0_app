@@ -176,6 +176,19 @@ export function explorerAccountUrl(base: string, id: string): string | null {
 }
 
 /**
+ * A transaction's explorer page.
+ *
+ * The configured base is the account route (`.../account`); a transaction lives
+ * one route over, `/tx/<id>`. A base without the account suffix gets the same
+ * treatment, so a custom explorer keeps working.
+ */
+export function explorerTxUrl(base: string, id: string): string | null {
+  const root = base.trim().replace(/\/+$/, '')
+  if (root.length === 0 || id.length === 0) return null
+  return `${root.replace(/\/account$/, '')}/tx/${id}`
+}
+
+/**
  * How a fee tier is divided.
  *
  * The swapper pays the LP fee tier; the protocol takes a share of it, so the

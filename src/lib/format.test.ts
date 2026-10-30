@@ -8,6 +8,7 @@ import {
   isHexId,
   normalizeHex,
   explorerAccountUrl,
+  explorerTxUrl,
   feeSplit,
   parseAmount,
   parseSlippagePercent,
@@ -254,5 +255,21 @@ describe('feeSplit', () => {
       lpKeeps: '1.0000%',
       share: '0.00%',
     })
+  })
+})
+
+describe('explorer URLs', () => {
+  it('turns the account route into the transaction route', () => {
+    expect(explorerTxUrl('https://testnet.midenscan.com/account', '0xfeed')).toBe(
+      'https://testnet.midenscan.com/tx/0xfeed',
+    )
+    expect(explorerTxUrl('https://testnet.midenscan.com/account/', '0xfeed')).toBe(
+      'https://testnet.midenscan.com/tx/0xfeed',
+    )
+  })
+
+  it('answers null when there is nowhere to point', () => {
+    expect(explorerTxUrl('', '0xfeed')).toBeNull()
+    expect(explorerTxUrl('https://testnet.midenscan.com/account', '')).toBeNull()
   })
 })

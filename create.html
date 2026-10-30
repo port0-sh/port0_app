@@ -64,8 +64,11 @@
 
   <header class="header">
     <a class="brand" href="/">
-      <img class="brand-mark" src="/mark.svg" alt="" />
+      <span class="brand-logo">
+        <img class="brand-mark" src="/mark.svg" alt="" />
+      </span>
       <span class="brand-name">%VITE_BRAND_NAME%</span>
+      <span class="brand-badge" aria-hidden="true">testnet</span>
     </a>
     <nav class="nav">
       <a href="/">Pools</a>
@@ -108,8 +111,8 @@
           <label><input type="radio" name="lpFee" value="30" checked /> 0.30%</label>
           <label><input type="radio" name="lpFee" value="100" /> 1.00%</label>
         </div>
-        <span id="param-fee-breakdown" class="muted hint"></span>
         <p class="hint muted">Recommended settings: 0.05% for stable pairs, 0.30% for volatile ones, 1.00% for illiquid tokens.</p>
+        <span id="param-fee-breakdown" class="muted hint"></span>
         <p class="hint">
           The fee is permanent for this pair: the registry lists one pool per pair.
           The pool stays empty until you deposit.
@@ -136,7 +139,7 @@
         <button class="btn" id="restart-button" hidden>Restart flow</button>
         <div class="muted flow-status" id="deploy-status"></div>
       </div>
-      <p class="muted" id="launch-cost" style="margin-top: 0.75rem">Network fees are paid from your wallet in USDCX.</p>
+      <p class="muted launch-cost" id="launch-cost" style="margin-top: 0.75rem">Network fees are paid from your wallet in USDCX.</p>
       <p id="deploy-result" hidden>Pool created: <a id="deploy-result-link" href="/pool.html">open pool page →</a></p>
     </section>
   </main>

@@ -6,7 +6,7 @@
  * initialized only on first use. Keep this module free of eager imports.
  */
 
-import type { Account, AccountId, MidenClient } from '@miden-sdk/miden-sdk'
+import type { Account, AccountId, MidenClient, RpcClient } from '@miden-sdk/miden-sdk'
 import type { XykClient } from '@port0.sh/sdk'
 import { CONFIG } from './config'
 import { isHexId, withHexPrefix } from './format'
@@ -20,6 +20,22 @@ let xykClient: Promise<XykClient> | null = null
 export function sdkModule(): Promise<typeof import('@miden-sdk/miden-sdk')> {
   sdkModulePromise ??= import('@miden-sdk/miden-sdk')
   return sdkModulePromise
+}
+
+let rpcClient: Promise<RpcClient> | null = null
+
+/**
+ * The node's RPC client, for reads that must not build account state.
+ *
+ * `accounts.getOrImport` materializes an `Account` on the calling thread, which
+ * rebuilds its storage trees in WASM and freezes a page for close to a second.
+ * A proof read answers with a Merkle path and a few words instead.
+ */
+export function getRpc(): Promise<RpcClient> {
+  rpcClient ??= sdkModule().then(({ Endpoint, RpcClient }) => {
+    return new RpcClient(new Endpoint(CONFIG.midenRpcUrl))
+  })
+  return rpcClient
 }
 
 /** Cached module loader for the port0 SDK. */
