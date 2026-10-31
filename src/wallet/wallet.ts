@@ -536,24 +536,25 @@ const SEND_RECALL_BLOCKS = 20
  * Has the connected wallet send `amount` base units of `faucetId`'s asset to
  * `recipientAddress` as a public note. Returns the wallet's transaction id.
  *
- * `recall` selects the note script. With it the wallet emits a P2IDE, whose
- * sender may reclaim the note after `SEND_RECALL_BLOCKS`. Without it the note is
- * the standard P2ID. A network account's auth allowlists P2ID and not P2IDE
- * (`AuthNetworkAccount::default_allowed_note_scripts`), so funding a pool or a
- * network faucet must pass `recall: false`: the account rejects a P2IDE with
- * `input note script root is not in the note script allowlist`.
+ * The caller states the note script, because it depends on the recipient, which
+ * this function cannot see. `recall: true` emits a P2IDE whose sender may reclaim
+ * the note after `SEND_RECALL_BLOCKS`; that is the script a send to a wallet
+ * wants. `recall: false` emits the standard P2ID: a network account's auth
+ * allowlists P2ID and not P2IDE (`AuthNetworkAccount::default_allowed_note_scripts`),
+ * so funding a pool or a network faucet must pass false, or the account rejects
+ * the note with `input note script root is not in the note script allowlist`.
  */
 export async function sendViaWallet(
   recipientAddress: string,
   faucetId: string,
   amount: number,
-  options?: { recall?: boolean },
+  options: { recall: boolean },
 ): Promise<string> {
   const adapter = await getBreadWallet()
   if (!adapter.address || !adapter.connected) {
     throw new Error('Wallet is not connected.')
   }
-  const recallBlocks = (options?.recall ?? true) ? SEND_RECALL_BLOCKS : undefined
+  const recallBlocks = options.recall ? SEND_RECALL_BLOCKS : undefined
   const txId = await adapter.requestSend(
     new SendTransaction(adapter.address, recipientAddress, faucetId, 'public', amount, recallBlocks),
   )

@@ -1,15 +1,13 @@
 import { formatAmount } from './format'
 
 /**
- * Measured 0.17 testnet fee for the deploy consume of a pool, in base units: a
- * P2ID note that the pool consumes as its first transaction.
+ * The price the network charges for the pool's deploy consume, in base units.
  *
- * Measured by `note_fee_benchmark` alongside the other paths. A pool sweeps any
- * leftover into the protocol pot on its next collect, so the funding is exact.
+ * Measured by `note_fee_benchmark` at verification base fee 7: 26,768 cycles, a
+ * kernel fee of 105 and a pricer price of 112. The account is funded at the
+ * price; a later collect sweeps any remainder toward the protocol.
  */
-// The pool's code grew with the lifecycle procedure; the deploy consume moved
-// one kernel bucket, from 133 to 140 base units at verification base fee 7.
-export const POOL_DEPLOY_FEE_BASE_UNITS = 140n
+export const POOL_DEPLOY_FEE_BASE_UNITS = 112n
 
 /**
  * Measured fee for the deploy consume of a network faucet, in base units.

@@ -1,7 +1,6 @@
 /**
- * Utils page. Two chain utilities that previously lived in the wallet menu:
- * one-time mint and send public note. Both need a connected wallet, so the
- * buttons stay disabled and the hint stays visible until one connects.
+ * Utils page: one-time mint and send public note. Both need a connected wallet,
+ * so the buttons stay disabled and the hint stays visible until one connects.
  */
 
 import { openOneTimeMint } from '../features/oneTimeMint'

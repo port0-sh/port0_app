@@ -26,7 +26,6 @@ export const NAME_MAX_CHARS = 32
 export const NAME_MAX_BYTES = 32
 export const DECIMALS_MIN = 0
 export const DECIMALS_MAX = 8
-export const DEFAULT_DECIMALS = 4
 export const DEFAULT_INITIAL_SUPPLY = '1000000'
 /** Mirrors the XYK contract MAX_AMOUNT; see module docs. */
 export const MAX_INITIAL_SUPPLY = 1n << 57n

@@ -588,15 +588,6 @@ button:disabled {
 }
 
 /* A button that reads as a link, for mode toggles inside a form row. */
-.btn-link {
-  background: none;
-  border: none;
-  padding: 0;
-  color: var(--green);
-  font-weight: bold;
-  cursor: pointer;
-}
-
 /* Tabs */
 
 .tabs {
@@ -1476,15 +1467,6 @@ dialog.alpha-gate li {
   bottom: calc(100% + 0.5rem);
 }
 
-.menu-label {
-  margin: 0;
-  padding: 0 1.5ch 0.5rem;
-  color: var(--dark-grey);
-  font-size: 0.75em;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
 .menu-item {
   display: block;
   width: 100%;
@@ -1499,12 +1481,6 @@ dialog.alpha-gate li {
 .menu-item:hover {
   background-color: var(--darkest-green);
   color: var(--green);
-}
-
-.menu-rule {
-  border: 0;
-  border-top: 1px solid var(--dark-grey);
-  margin: 0.5rem 0;
 }
 
 .attribution {

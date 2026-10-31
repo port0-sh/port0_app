@@ -270,19 +270,7 @@ export async function fetchPoolActivity(
   if (!response.ok) {
     throw new Error(`indexer /pools/${poolId}/activity returned ${response.status}`)
   }
-  const body = (await response.json()) as PoolActivity
-  // The table lists named operations. An indexer that predates that sends
-  // observation rows beside the trades, and marks a transaction it cannot
-  // describe as `other`; neither is a table row. The newer payload already
-  // leaves both out and sends the count it dropped.
-  const rowIsTrade = (row: ActivityRow): boolean =>
-    row.trade !== undefined && row.trade.kind !== 'other'
-  return {
-    samples: body.samples,
-    activity: body.activity.filter(rowIsTrade),
-    unrecorded:
-      body.unrecorded ?? body.activity.filter((row) => row.trade?.kind === 'other').length,
-  }
+  return (await response.json()) as PoolActivity
 }
 
 

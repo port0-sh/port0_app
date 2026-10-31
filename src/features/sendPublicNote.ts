@@ -66,7 +66,9 @@ export function openSendPublicNote(): void {
 
       // requestSend takes a number, not bigint (adapter API).
       setText(status, 'Waiting for the wallet…')
-      const txId = await sendViaWallet(recipient, CONFIG.chainFeeFaucetId, Number(amount))
+      const txId = await sendViaWallet(recipient, CONFIG.chainFeeFaucetId, Number(amount), {
+        recall: true,
+      })
       setText(status, `Submitted ${shortHex(txId)}; confirming…`)
       const { txHash } = await waitForTransaction(txId)
       toast(`Public note sent: ${shortHex(txHash)}`)

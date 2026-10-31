@@ -4,20 +4,15 @@
  * A leg is counted only when its token is worth the fee asset by identity: the
  * fee asset itself, or a dollar-pegged stablecoin listed by faucet id. Every
  * counted leg is taken at par, converted from its own decimals to the fee
- * asset's.
- *
- * Nothing is valued through a price inferred from another pool. That inference
- * is what let a pool holding 0.59 MICO against 2 USDCX price MICO at 3.38, and a
- * test token with a half-million supply turn five pools holding about 47 USDCX
- * into a TVL of 3.87M.
+ * asset's. Nothing is valued through a price inferred from another pool, which
+ * would compound one pool's ratio into a protocol total.
  *
  * A pool's own ratio makes its two legs equal in value: `reserve0` of token0 is
  * worth `reserve1` of token1 by construction. So a pool with one counted leg is
  * counted twice, and a pool with two counted legs once each. The error is bounded
- * by the counted leg itself: a skewed pool overstates by at most its dollar side,
- * where a price taken from elsewhere overstated by five orders of magnitude.
+ * by the counted leg itself.
  *
- * Volume counts the counted legs only. A flow is not a stock, and the dollar side
+ * Volume counts the counted legs only: a flow is not a stock, and the dollar side
  * is what the fee is charged on.
  */
 
@@ -70,6 +65,11 @@ function legsOf(pool: FeeAssetPool): [Leg, Leg] {
   ]
 }
 
+/** The trusted set, lowercased once. */
+function trustedSet(tokens: readonly string[]): Set<string> {
+  return new Set(tokens.map((id) => id.toLowerCase()))
+}
+
 /** A leg's amount in the fee asset's base units, at par. */
 function atPar(amount: bigint, decimals: number | null, feeDecimals: number): bigint {
   if (decimals === null || decimals === feeDecimals) return amount
@@ -96,7 +96,7 @@ export function volumeValuer(
   trustedTokens: readonly string[],
   feeDecimals: number,
 ): (pool: FeeAssetPool) => PoolVolume {
-  const trusted = new Set(trustedTokens.map((id) => id.toLowerCase()))
+  const trusted = trustedSet(trustedTokens)
   return (pool) => {
     let base = 0n
     let counted = false
@@ -115,7 +115,7 @@ export function feeAssetTotals(
   trustedTokens: readonly string[],
   feeDecimals: number,
 ): FeeAssetTotals {
-  const trusted = new Set(trustedTokens.map((id) => id.toLowerCase()))
+  const trusted = trustedSet(trustedTokens)
   let tvlBase = 0n
   let volumeBase = 0n
   let counted = 0

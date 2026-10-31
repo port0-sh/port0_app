@@ -61,7 +61,9 @@ import { adoptLoader } from '../ui/spinner'
 import { mountTokenCombo, type TokenSource } from '../ui/tokenCombo'
 import { toast } from '../ui/toast'
 import { mountWallet } from '../wallet/ui'
+import { findRefund, type Refund } from '../lib/refund'
 import {
+  consumableNotes,
   requestAssets,
   submitViaWallet,
   syncWallet,
@@ -643,31 +645,81 @@ async function refreshRecord(): Promise<void> {
  * block, and the indexer samples within its 15 s poll, so a single read after
  * the transaction returns stale reserves.
  */
-function watchUntilChanged(before: PoolState, status: HTMLSpanElement): void {
-  const deadline = Date.now() + WATCH_MS
-  const step = async (): Promise<void> => {
-    await loadState()
-    await refreshBalances()
-    await refreshRecord()
-    await loadHistory()
-    const moved =
-      currentState !== null &&
-      (currentState.reserve0 !== before.reserve0 ||
-        currentState.reserve1 !== before.reserve1 ||
-        currentState.lpSupply !== before.lpSupply)
-    if (moved) {
-      setText(status, '')
-      return
-    }
-    if (Date.now() >= deadline) {
-      setText(status, 'The pool has not changed yet. Reload to check again.')
-      return
-    }
-    setText(status, 'Updating…')
-    await sleep(WATCH_STEP_MS)
-    void step()
+/** The notes the wallet already holds, so a new refund can be told apart. */
+async function heldNoteIds(): Promise<Set<string>> {
+  try {
+    return new Set((await consumableNotes()).map((note) => note.noteId))
+  } catch {
+    return new Set()
   }
-  void step()
+}
+
+/** The refund line: what the pool paid back, and what to do with it. */
+function refundLine(refund: Refund): string {
+  const pool = poolIdHex === null ? '' : normalizeHex(poolIdHex)
+  const parts = refund.assets.map((asset) => {
+    if (asset.faucetId === pool) return `${formatAmount(asset.amount, 0)} ${lpSymbol()}`
+    const first = record !== null && record.token0FaucetId === asset.faucetId
+    const symbol = first ? record?.token0Symbol : record?.token1Symbol
+    const decimals = first ? record?.token0Decimals : record?.token1Decimals
+    return `${formatAmount(asset.amount, decimals ?? 0)} ${symbol ?? shortHex(asset.faucetId)}`
+  })
+  return `Refunded: ${parts.join(' + ')}. Accept it in your wallet.`
+}
+
+/**
+ * Watches a submitted trade to its outcome: the pool's state moves (a fill), the
+ * pool pays the input back in a note (a refund), or the watch window ends.
+ *
+ * The refund is checked first because it is positive evidence. The state can
+ * also move because another trade landed, while the refund note names our trade:
+ * its sender is the pool, its faucet is the input, and it was not in the wallet
+ * before the submission.
+ */
+function watchUntilChanged(
+  before: PoolState,
+  status: HTMLSpanElement,
+  watch: { faucets: string[]; seen: ReadonlySet<string> },
+): Promise<'filled' | 'refunded' | 'timeout'> {
+  const deadline = Date.now() + WATCH_MS
+  return new Promise((resolve) => {
+    const step = async (): Promise<void> => {
+      await loadState()
+      await refreshBalances()
+      await refreshRecord()
+      await loadHistory()
+      const refund = await findRefund(
+        await consumableNotes().catch(() => []),
+        poolIdHex ?? '',
+        watch.faucets,
+        watch.seen,
+      )
+      if (refund !== null) {
+        setText(status, refundLine(refund))
+        resolve('refunded')
+        return
+      }
+      const moved =
+        currentState !== null &&
+        (currentState.reserve0 !== before.reserve0 ||
+          currentState.reserve1 !== before.reserve1 ||
+          currentState.lpSupply !== before.lpSupply)
+      if (moved) {
+        setText(status, '')
+        resolve('filled')
+        return
+      }
+      if (Date.now() >= deadline) {
+        setText(status, 'The pool has not changed yet. Reload to check again.')
+        resolve('timeout')
+        return
+      }
+      setText(status, 'Updating…')
+      await sleep(WATCH_STEP_MS)
+      void step()
+    }
+    void step()
+  })
 }
 
 /* Pool history: a lightweight-charts price series plus a sample table. */
@@ -1787,13 +1839,22 @@ async function doSwap(): Promise<void> {
       // pending and the sender never has to reclaim.
       deadline: 0n,
     })
+    const seen = await heldNoteIds()
     const txId = await submitViaWallet(output.request)
     setText(swapStatus, `Submitted ${shortHex(txId)}; confirming…`)
     if (!(await waitOrHold(txId, swapStatus))) return
     const { txHash } = await waitForTransaction(txId)
-    playArrivalBell()
-    toast(`Swap settled: ${shortHex(txHash)}`)
-    watchUntilChanged(before, swapStatus)
+    setText(swapStatus, 'Submitted; waiting for the pool…')
+    void watchUntilChanged(before, swapStatus, { faucets: [tokenIn.toString()], seen }).then(
+      (outcome) => {
+        if (outcome === 'filled') {
+          playArrivalBell()
+          toast(`Swap settled: ${shortHex(txHash)}`)
+        } else if (outcome === 'refunded') {
+          toast('The swap was refunded. Accept the refund in your wallet.', 'error', 20_000)
+        }
+      },
+    )
   } catch (error) {
     toast(error instanceof Error ? error.message : String(error), 'error')
     setText(swapStatus, '')
@@ -1821,12 +1882,22 @@ async function doAdd(): Promise<void> {
       // Spot: a deposit that cannot mint is refunded as a note.
       deadline: 0n,
     })
+    const seen = await heldNoteIds()
     const txId = await submitViaWallet(output.request)
     setText(addStatus, `Submitted ${shortHex(txId)}; confirming…`)
     if (!(await waitOrHold(txId, addStatus))) return
     const { txHash } = await waitForTransaction(txId)
-    toast(`Deposit confirmed: ${shortHex(txHash)}`)
-    watchUntilChanged(before, addStatus)
+    setText(addStatus, 'Submitted; waiting for the pool…')
+    void watchUntilChanged(before, addStatus, {
+      faucets: [record!.token0FaucetId, record!.token1FaucetId],
+      seen,
+    }).then((outcome) => {
+      if (outcome === 'filled') {
+        toast(`Deposit confirmed: ${shortHex(txHash)}`)
+      } else if (outcome === 'refunded') {
+        toast('The deposit was refunded. Accept the refund in your wallet.', 'error', 20_000)
+      }
+    })
   } catch (error) {
     toast(error instanceof Error ? error.message : String(error), 'error')
     setText(addStatus, '')
@@ -1872,12 +1943,23 @@ async function doRemove(): Promise<void> {
       })
       request = output.request
     }
+    const seen = await heldNoteIds()
     const txId = await submitViaWallet(request)
     setText(removeStatus, `Submitted ${shortHex(txId)}; confirming…`)
     if (!(await waitOrHold(txId, removeStatus))) return
     const { txHash } = await waitForTransaction(txId)
-    toast(`Withdrawal confirmed: ${shortHex(txHash)}`)
-    watchUntilChanged(before, removeStatus)
+    setText(removeStatus, 'Submitted; waiting for the pool…')
+    void watchUntilChanged(before, removeStatus, {
+      // The LP token's faucet is the pool itself.
+      faucets: [poolIdHex ?? ''],
+      seen,
+    }).then((outcome) => {
+      if (outcome === 'filled') {
+        toast(`Withdrawal confirmed: ${shortHex(txHash)}`)
+      } else if (outcome === 'refunded') {
+        toast('The withdrawal was refunded. Accept the refund in your wallet.', 'error', 20_000)
+      }
+    })
   } catch (error) {
     toast(error instanceof Error ? error.message : String(error), 'error')
     setText(removeStatus, '')

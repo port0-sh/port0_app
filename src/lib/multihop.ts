@@ -17,10 +17,11 @@
 
 import { getFreshAccount, getXyk, sdkModule } from './client'
 import { CONFIG } from './config'
-import { isHexId, normalizeHex, shortHex, withHexPrefix } from './format'
+import { normalizeHex, shortHex, withHexPrefix } from './format'
 import { fetchPool, toPoolView, type IndexerPool, type PoolView } from './indexer'
 import type { Route } from './router'
 import type { PoolConfig } from '@port0.sh/sdk'
+import { findRefund, normalizeWalletAccount, type Refund } from './refund'
 import {
   consumableNotes,
   consumeNote,
@@ -53,13 +54,30 @@ export class HopFailure extends Error {
   readonly stage: HopStage
   /** The submission may still land: a retry could duplicate it. */
   readonly unknown: boolean
+  /** The pool paid the hop's input back: the trade did not fill. */
+  readonly refund?: Refund
 
-  constructor(message: string, hopIndex: number, stage: HopStage, unknown = false) {
+  constructor(
+    message: string,
+    hopIndex: number,
+    stage: HopStage,
+    unknown = false,
+    refund?: Refund,
+  ) {
     super(message)
     this.name = 'HopFailure'
     this.hopIndex = hopIndex
     this.stage = stage
     this.unknown = unknown
+    this.refund = refund
+  }
+}
+
+/** The pool refunded the hop instead of filling it: the input is back. */
+class HopRefunded extends Error {
+  constructor(readonly refund: Refund) {
+    super('The pool refunded the hop.')
+    this.name = 'HopRefunded'
   }
 }
 
@@ -96,18 +114,6 @@ const NOTE_POLL_MS = 5_000
 /** How long to wait for an intermediate note before giving up. */
 const NOTE_WAIT_MS = 180_000
 
-/** Normalizes a faucet id the wallet reported, which may be bech32. */
-async function normalizeFaucet(raw: string): Promise<string | null> {
-  const value = raw.trim()
-  if (isHexId(value)) return normalizeHex(value)
-  try {
-    const { AccountId } = await sdkModule()
-    return normalizeHex(AccountId.fromBech32(value).toString())
-  } catch {
-    return null
-  }
-}
-
 /**
  * The wallet's balance of `faucetId`, in base units, or null when the read
  * itself failed.
@@ -120,7 +126,7 @@ async function walletBalance(faucetId: string): Promise<bigint | null> {
   const wanted = normalizeHex(faucetId)
   try {
     for (const asset of await requestAssets()) {
-      const key = await normalizeFaucet(asset.faucetId)
+      const key = await normalizeWalletAccount(asset.faucetId)
       if (key !== wanted) continue
       try {
         return BigInt(asset.amount)
@@ -183,6 +189,7 @@ async function acquireIntermediate(
   minimum: bigint,
   balanceBefore: bigint,
   onWait: (phase: RoutePhase, message: string) => void,
+  refund: { poolId: string; inputFaucetId: string; seen: ReadonlySet<string> },
 ): Promise<Acquired> {
   const wanted = normalizeHex(faucetId)
   const deadline = Date.now() + NOTE_WAIT_MS
@@ -198,7 +205,7 @@ async function acquireIntermediate(
     for (const note of notes) {
       let amount: bigint | null = null
       for (const asset of note.assets) {
-        const key = await normalizeFaucet(asset.faucetId)
+        const key = await normalizeWalletAccount(asset.faucetId)
         if (key !== wanted) continue
         try {
           amount = BigInt(asset.amount)
@@ -218,6 +225,12 @@ async function acquireIntermediate(
     if (fallback !== null) {
       return await acceptNote(fallback.note, fallback.amount, faucetId, wanted, onWait)
     }
+
+    // An output note above is the fill; the pool's refund of the input is the
+    // evidence that this hop will never fill. A refund an earlier attempt left
+    // behind is not this hop's, which is what `seen` excludes.
+    const refunded = await findRefund(notes, refund.poolId, [refund.inputFaucetId], refund.seen)
+    if (refunded !== null) throw new HopRefunded(refunded)
 
     if (Date.now() > deadline) {
       throw new SubmissionUnknown(
@@ -294,6 +307,7 @@ export async function executeRoute(options: {
     const hop = route.hops[index]
     const last = index === total - 1
     let stage: HopStage = index === startHop ? startStage : 'submit'
+    let seen = new Set<string>()
     executed[index] = { ...executed[index], amountIn }
     let balanceBefore = index === startHop && startStage === 'consume' ? startBalanceBefore : 0n
     // Once a submission returns an id, any later error is "unknown": the
@@ -338,6 +352,9 @@ export async function executeRoute(options: {
           fee: noteFees.swap ?? 0n,
           feeFaucetId: view.feeFaucetId,
         }
+        // The wallet's notes before this hop, so a refund this hop causes can be
+        // told apart from one an earlier attempt left behind.
+        seen = new Set((await consumableNotes().catch(() => [])).map((note) => note.noteId))
         const pool = xyk.pool({ poolId: poolAccountId, feeFaucetId, noteFees })
         // Spot per hop: a hop that cannot fill is refunded by the pool, and the
         // route stops instead of waiting out the deadline.
@@ -364,6 +381,7 @@ export async function executeRoute(options: {
         minOut(hop.amountOut, slippageBps),
         balanceBefore,
         (phase, message) => onProgress?.({ index, total, phase, message }),
+        { poolId: hop.poolId, inputFaucetId: hop.tokenIn, seen },
       )
       if (acquired.consumeTxId) {
         onProgress?.({
@@ -380,6 +398,15 @@ export async function executeRoute(options: {
       amountIn = acquired.amount
     } catch (error) {
       if (error instanceof HopFailure) throw error
+      if (error instanceof HopRefunded) {
+        throw new HopFailure(
+          `The pool refunded hop ${index + 1}.`,
+          index,
+          'submit',
+          false,
+          error.refund,
+        )
+      }
       throw new HopFailure(
         error instanceof Error ? error.message : String(error),
         index,

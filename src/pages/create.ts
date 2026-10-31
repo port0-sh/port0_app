@@ -408,8 +408,8 @@ function renderFeeBreakdown(): void {
  * The only gate is a connected wallet.
  *
  * The protocol fee destination is the registry's `protocol_fee_to`, read on chain
- * when a pool collects, so no app-side configuration can enable or disable pool
- * creation; the old recipient variable only duplicated that and went stale.
+ * when a pool collects, so no app-side configuration decides where it goes or
+ * whether a pool can be created.
  */
 function renderGating(): void {
   const connected = walletStore.get().connected

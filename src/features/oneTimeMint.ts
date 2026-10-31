@@ -33,6 +33,9 @@ import {
 import { openModal } from '../ui/modal'
 import { toast } from '../ui/toast'
 import { getClient, sdkModule, xykModule } from '../lib/client'
+
+/** Blocks after which a failed launch's fee may be reclaimed (~60 s at 3 s blocks). */
+const LAUNCH_RECLAIM_BLOCKS = 20n
 import {
   sendViaWallet,
   submitViaWallet,
@@ -197,12 +200,16 @@ export function openOneTimeMint(): void {
         faucetId: faucet.id(),
         recipient: wallet,
       })
+      // The fee sponsorship is the owner's to reclaim if the launch never lands.
+      // The window starts after the same margin the wallet leaves on a sent note.
+      const summary = await client.syncChain()
       const sponsor = buildFeeSponsorshipNote({
         sender: wallet,
         target: faucet.id(),
         featureNote: launch,
         feeFaucetId: CONFIG.chainFeeFaucetId,
         feeAmount: LAUNCH_FEE,
+        reclaimHeight: BigInt(summary.blockNum()) + LAUNCH_RECLAIM_BLOCKS,
       })
       // The wallet executes this request, so it takes the wallet variant: the
       // client-signed one omits the multisig auth-args preimage a guarded wallet

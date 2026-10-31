@@ -817,14 +817,16 @@ function line(amount: string, symbol: string, title?: string): Child {
 
 /** Token metadata from the indexed pools: symbol and decimals by faucet id. */
 function routeTokenMeta(faucetId: string): TokenEntry | null {
-  const wanted = faucetId.toLowerCase()
-  const verified = verifiedMeta.get(wanted)
+  // The route's ids carry `0x`; a wallet-reported faucet may not. Compare the
+  // bare form so both resolve to the same token.
+  const wanted = normalizeHex(faucetId)
+  const verified = verifiedMeta.get(`0x${wanted}`)
   if (verified) return verified
   for (const pool of activePools()) {
-    if (pool.token0.toLowerCase() === wanted && pool.token0_decimals !== null) {
+    if (normalizeHex(pool.token0) === wanted && pool.token0_decimals !== null) {
       return { symbol: pool.token0_symbol ?? shortHex(faucetId), decimals: pool.token0_decimals }
     }
-    if (pool.token1.toLowerCase() === wanted && pool.token1_decimals !== null) {
+    if (normalizeHex(pool.token1) === wanted && pool.token1_decimals !== null) {
       return { symbol: pool.token1_symbol ?? shortHex(faucetId), decimals: pool.token1_decimals }
     }
   }
@@ -1439,7 +1441,23 @@ async function doRouteSwap(): Promise<void> {
     void refreshWalletTokens()
   } catch (error) {
     if (error instanceof HopFailure) {
-      if (error.unknown) {
+      if (error.refund) {
+        // The pool paid the hop's input back: nothing is pending, so a retry is
+        // safe, but the refund note must be accepted before it can be spent.
+        if (pendingRoute) pendingRoute = { ...pendingRoute, stage: 'submit' }
+        const paid = error.refund.assets
+          .map((asset) => {
+            const meta = routeTokenMeta(asset.faucetId)
+            return `${formatAmount(asset.amount, meta?.decimals ?? 0)} ${meta?.symbol ?? shortHex(asset.faucetId)}`
+          })
+          .join(' + ')
+        routeSubmit.textContent = 'Retry'
+        renderRouteProgress(
+          route,
+          error.hopIndex,
+          `The pool refunded hop ${error.hopIndex + 1}: ${paid} came back. Accept the refund in your wallet, then retry.`,
+        )
+      } else if (error.unknown) {
         routeHeld = true
         renderRouteProgress(
           route,

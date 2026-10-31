@@ -58,7 +58,7 @@ function start(): void {
     const amount = Number(qs<HTMLInputElement>(document, '#send-amount').value)
     try {
       if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error('amount must be a positive integer')
-      const txId = await sendViaWallet(recipient, faucet, amount)
+      const txId = await sendViaWallet(recipient, faucet, amount, { recall: true })
       log(`send submitted: ${txId}`)
       await waitForTransaction(txId)
       log(`send confirmed: ${txId}`)

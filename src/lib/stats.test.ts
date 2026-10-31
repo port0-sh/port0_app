@@ -47,7 +47,7 @@ describe('feeAssetTotals', () => {
   })
 
   it('counts a bridged dollar in a pool with no fee asset', () => {
-    // The case the old rule missed: USDT/PYUSD is liquidity, not a curiosity.
+    // USDT and PYUSD are both counted at par, so the pair is liquidity.
     const totals = feeAssetTotals(
       [pool({ token0: USDT, token1: PYUSD, reserve0: '2500000', reserve1: '2500000', token0_decimals: 6, token1_decimals: 6 })],
       TRUSTED,
