@@ -1,21 +1,14 @@
 import { formatAmount } from './format'
 
 /**
- * The price the network charges for the pool's deploy consume, in base units.
- *
- * Measured by `note_fee_benchmark` at verification base fee 7: 26,768 cycles, a
- * kernel fee of 105 and a pricer price of 112. The account is funded at the
- * price; a later collect sweeps any remainder toward the protocol.
+ * The deploy consume's fee, in the fee asset's base units, at verification base
+ * fee 7. The funding note carries exactly this amount.
  */
-export const POOL_DEPLOY_FEE_BASE_UNITS = 112n
+export const POOL_DEPLOY_FEE_BASE_UNITS = 140n
 
 /**
- * Measured fee for the deploy consume of a network faucet, in base units.
- *
- * The same call shape as a pool deploy, but a lighter account: 25,239 cycles,
- * priced at 112 base units. A faucet has no sweep, so it is funded with exactly
- * this rather than with the pool's figure; the launch that follows is paid by the
- * owner's sponsorship.
+ * The faucet deploy consume's fee, in base units, at verification base fee 7:
+ * 25,239 cycles. A faucet has no sweep, so the funding is exactly this.
  */
 export const FAUCET_DEPLOY_FEE_BASE_UNITS = 112n
 

@@ -37,7 +37,7 @@ describe('feeAprOneDay', () => {
 describe('launch cost', () => {
   it('shows the register price, the network fee, and their total', () => {
     expect(launchCostLine(119n, POOL_DEPLOY_FEE_BASE_UNITS, 6, 'USDCX')).toBe(
-      'Registry fee: 0.000119 USDCX + network fee: 0.000112 USDCX = 0.000231 USDCX',
+      'Registry fee: 0.000119 USDCX + network fee: 0.00014 USDCX = 0.000259 USDCX',
     )
   })
 

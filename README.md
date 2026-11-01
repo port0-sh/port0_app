@@ -3,9 +3,9 @@
 Static web application for the port0.sh constant-product AMM on Miden: browse
 pools, swap, provide liquidity, launch a pool, and launch a fixed-supply token.
 
-A six-page MPA, no client-side router and no framework. The Miden SDK and the
-`@port0.sh/sdk` load on demand, so the pages paint and the pool list renders
-without the WASM stack.
+A six-page MPA plus an unlinked debug page, no client-side router and no
+framework. The Miden SDK and the `@port0.sh/sdk` load on demand, so the pages
+paint and the pool list renders without the WASM stack.
 
 Status: unaudited, closed alpha. Pools and their notes are public network accounts.
 
@@ -34,8 +34,8 @@ be overridden individually.
 | `VITE_NETWORK` | RPC | Fee faucet | Fees in real funds |
 | --- | --- | --- | --- |
 | `testnet` | `https://rpc.testnet.miden.io` | `0x4cbdcaff…6436` | no |
-| `devnet` | `https://rpc.devnet.miden.io` | — | no |
-| `localnet` | `http://localhost:57291` | — | no |
+| `devnet` | `https://rpc.devnet.miden.io` | (none) | no |
+| `localnet` | `http://localhost:57291` | (none) | no |
 | `mainnet` | `https://rpc.cedar.miden.io` | `0xe69e6ca6…9feb` | yes, gated by the risk notice |
 
 An unrecognised name fails the build. On a network with real funds the first visit
@@ -47,12 +47,20 @@ names the pool source. Both are required for a usable deployment; the app degrad
 to "no pools" without the indexer.
 
 `VITE_LEGACY_REGISTRY_IDS` is a comma-separated list of earlier registries. Their
-pools are read directly from the chain and appended to the same pool table,
+pools come from the indexer's `/legacy` and are appended to the same pool table,
 tagged `Unsupported`, dimmed, excluded from the stats and the router, and
 withdraw-only through the frozen SDK that produced their notes
-(`@port0.sh/sdk-legacy`, pinned to the published version). A switch in the table
+(`@port0.sh/sdk-legacy`, pinned to the published version). The list must match the
+indexer's legacy list. The rows are shown by default, and a switch in the table
 hides them. When a registry is replaced, move its id from `VITE_REGISTRY_ID` into
-this list.
+this list on both sides.
+
+`VITE_TRADING_ENABLED=1` enables every transaction the app builds; without it
+the pages render and the actions stay disabled, so a defect in a note path can be
+stopped by a configuration change. `VITE_TRUSTED_TOKENS` sets the assets counted
+at par with the fee asset in the protocol totals, replacing the network's list.
+`VITE_PINNED_POOLS` puts the named pool ids first in the table. `VITE_SITE_URL` is
+the absolute site origin used by canonical and unfurl metadata.
 
 `/debug.html` is an unlinked, noindex wallet edge-case page: sync and height,
 send with recall, wallet notes, and faulty swaps, deposits and withdrawals that
@@ -81,8 +89,13 @@ the mainnet build, and linked from nowhere.
 | `lib/indexer.ts` | Pool list, history, status, fee-schedule root mapping |
 | `lib/router.ts` | Route enumeration over the indexed reserves, pure `bigint` |
 | `lib/multihop.ts` | Hop-by-hop execution through the wallet |
+| `lib/refund.ts` | Recognises the pool's refund note and settles the row |
+| `lib/gating.ts` | The swap, add, and remove action gate and its copy |
+| `lib/stats.ts` | Protocol stats, the 24 h volume at par in the fee asset |
+| `lib/registry.ts` | Registry reads by account proof: listing and faucet metadata |
 | `lib/fees.ts` | LP fee tiers, the measured deploy fees, fee-to-APR |
-| `lib/history.ts` | Price ratios and chart series |
+| `lib/history.ts` | Price ratios, candles, and the window caption |
+| `lib/brand.ts` | Brand slots and the drawings |
 | `lib/chart.ts` | TradingView lightweight-charts, imported on demand |
 | `lib/format.ts` | Exact `bigint` amounts, bps, id shortening |
 | `lib/token.ts` | Fixed-supply token validation |
@@ -93,7 +106,7 @@ the mainnet build, and linked from nowhere.
 | `wallet/wallet.ts` | Bread adapter facade: connect, submit, sync, reads |
 | `wallet/ui.ts` | Login button, account menu, wallet picker |
 | `ui/` | `modal`, `toast`, `spinner`, `tokenCombo` |
-| `pages/` | One module per HTML entry |
+| `pages/` | One module per HTML entry, including the unlinked debug page |
 | `features/` | Token launch, registry fee, public note, wallet token picker |
 
 ## Wallet
@@ -110,10 +123,16 @@ submits, and confirms.
 
 ## Pools
 
-The pool list comes from the indexer, which polls the registry and each pool. The
-table shows pair, price, both reserves, 24 h volume, and LP fee; it filters on
-symbols, pair, and ids, sorts by column, and pages at 10, 25, or 50 rows. The page
-size is remembered under `port0-app:page-size`.
+The pool list comes from the indexer, which polls the active registry and each of
+its pools. The table shows pair, price, both reserves, 24 h volume, LP fee, and
+fee APR; it filters on symbols, pair, and ids, sorts by column, and pages at 10,
+25, or 50 rows. The page size is remembered under `port0-app:page-size`.
+
+Pools of earlier registries come from the indexer's `/legacy`, filtered to the
+app's legacy list, and are appended to the same table: tagged `Unsupported`,
+dimmed, excluded from the stats and the router, and withdraw-only through the SDK
+version that produced their notes. They are shown by default, and a switch hides
+them.
 
 A pool is registered by a register note the creator's wallet emits after the pool
 is deployed. The registry verifies the pool on chain before listing it: its code
@@ -143,8 +162,14 @@ and its state is `port0-app:sound:v1`.
 
 Three actions against one pool: swap either direction, add liquidity at the current
 ratio, and remove it. The page shows the pool's fee split, reserves, price, LP supply,
-and a price chart built from the indexer's history. LP amounts are shown with the LP
-token's own symbol, which the pool account carries as its faucet metadata.
+a price chart built from the indexer's history, and an activity table from
+`/pools/{id}/activity`: the kind, the price from the row's own amounts, the block,
+the UTC time, and an explorer link, with the count of unresolved transactions
+stated beside it. LP amounts are shown with the LP token's own symbol, which the
+pool account carries as its faucet metadata.
+
+A rejected trade is refunded by the pool. The page recognises the refund note,
+states it, and offers a retry that rebuilds the request at a fresh tip.
 
 ## Utils
 
@@ -152,7 +177,7 @@ token's own symbol, which the pool account carries as its faucet metadata.
 | --- | --- |
 | Token launch | Creates a network faucet and launches its whole supply to the wallet once. No invitation code, because the faucet is a network account; the owner is immutable |
 | Registry fee | Reads the registry's admin and live register fee, refuses any other wallet, and emits the config note |
-| Public note | Sends the chain fee asset with a public note, the only form that can target an account that does not exist on chain yet |
+| Public note | Sends the chain fee asset with a public note carrying a recall height, the only form that can target an account that does not exist on chain yet, and reclaimable by the sender if never consumed |
 
 ## Fees
 
@@ -161,9 +186,9 @@ The protocol's share is carved out of that fee, not added to it, so the swapper 
 the tier and the output does not depend on the share.
 
 Network note fees are denominated in the chain's fee asset and priced per note kind:
-126 base units for the four pool notes and the registry notes, 119 for a token
-launch, 0 for the registry config note. A pool and the registry reserve the measured
-collect fee out of the fee asset so a sweep can pay its own transaction.
+126 base units for the four pool notes and the two registry notes, 119 for a token
+launch, 0 for the registry config note. A pool and the registry reserve that same
+scheduled price out of the fee asset so a sweep can pay its own transaction.
 
 ## Limits
 

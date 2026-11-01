@@ -120,6 +120,9 @@ const addStatus = qs<HTMLDivElement>(document, '#add-status')
 const removeForm = qs<HTMLFormElement>(document, '#remove-form')
 const removeLp = qs<HTMLInputElement>(document, '#remove-lp')
 const removeSlippage = qs<HTMLInputElement>(document, '#remove-slippage')
+// The remove form's wide bound is a mainnet default; every other network starts
+// at the same 0.5 as swap and add.
+if (CONFIG.network === 'mainnet') removeSlippage.value = '99'
 const removeQuote = qs<HTMLDivElement>(document, '#remove-quote')
 const removeSubmit = qs<HTMLButtonElement>(document, '#remove-submit')
 const removeStatus = qs<HTMLDivElement>(document, '#remove-status')
@@ -1521,7 +1524,9 @@ function renderRemoveQuote(): void {
         `${formatAmount(min1, record.token1Decimals)} ${record.token1Symbol}`,
       ),
     )
-    if (slippageBps > 500n) {
+    // On a legacy pool the bound is fixed by the page, not chosen: the legacy
+    // removal takes the fair share at execution, and no swap form is offered.
+    if (!legacyMode && slippageBps > 500n) {
       removeQuote.append(
         el(
           'p',
@@ -1679,7 +1684,16 @@ async function bootLegacy(): Promise<void> {
     setupForms()
     renderSummary()
     renderWalletGating()
+    void renderLinks()
     showLoadedPage()
+    // The legacy path leaves boot before the shared wallet wiring, so it wires
+    // its own.
+    walletStore.subscribe(() => {
+      renderWalletGating()
+      void refreshBalances()
+      void loadState()
+    })
+    await refreshBalances()
     toast('Legacy pool. Withdrawals only.', 'error', 12000)
   } catch (error) {
     showPoolError(error instanceof Error ? error.message : String(error))
@@ -1820,9 +1834,9 @@ async function doSwap(): Promise<void> {
     return
   }
   primeSound()
-  const sender = await senderAccountId()
   setBusy(swapSubmit, swapStatus, 'Submitting…')
   try {
+    const sender = await senderAccountId()
     await syncWallet()
     const before = await refreshBeforeAction()
     const { AccountId } = await sdkModule()
@@ -1868,9 +1882,9 @@ async function doAdd(): Promise<void> {
     toast('Legacy pool. Withdrawals only.', 'error')
     return
   }
-  const sender = await senderAccountId()
   setBusy(addSubmit, addStatus, 'Submitting…')
   try {
+    const sender = await senderAccountId()
     await syncWallet()
     const before = await refreshBeforeAction()
     const output = await (await poolHandle()).addLiquidity({
@@ -1907,9 +1921,9 @@ async function doAdd(): Promise<void> {
 }
 
 async function doRemove(): Promise<void> {
-  const sender = await senderAccountId()
   setBusy(removeSubmit, removeStatus, 'Submitting…')
   try {
+    const sender = await senderAccountId()
     await syncWallet()
     const before = await refreshBeforeAction()
     let request: Parameters<typeof submitViaWallet>[0]
